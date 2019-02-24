@@ -34,6 +34,7 @@ class cuboid:
                 initial_corners.append([elt_x,elt_y,elt_z])
 
     initial_corners = np.transpose(np.asarray(initial_corners))
+    print("Old corner points are: \n",initial_corners,"\n")
     return initial_corners
 
   def get_rotation_matrix(self):
@@ -41,17 +42,35 @@ class cuboid:
     rot_mat = transforms3d.euler.euler2mat(self.orientation[0], self.orientation[1], self.orientation[2], 'sxyz')
     return rot_mat
 
-  def get_new_corners(self,rot_mat,initial_corners):
+  def get_new_corners(self):
+    initial_corners = self.get_initial_corners()
+    rot_mat = self.get_rotation_matrix()
     new_corners = np.dot(rot_mat,initial_corners)
-    ipdb.set_trace()
+    print("New corner points are: \n",new_corners,"\n")
     return new_corners
 
+def get_points_for_normals(new_corners):    #EDIT CODE FOR OPTIMISING IT. CHECK ONE NORMAL AND THEN IF SEPERATION EXISTS COMMENT NP COLLISION
+    normal_1 = new_corners[:,0:3]
+    normal_2 = np.hstack((np.vstack(new_corners[:,0:2]),np.reshape(new_corners[:,5],(3,1))))    #Why is vertical stack working in the interior bracket?
+    normal_3 = np.transpose(np.reshape(np.hstack((np.hstack((new_corners[:,0],new_corners[:,2])),new_corners[:,6])),(3,3)))
+    return [normal_1,normal_2,normal_3]
 
+def get_projection_from_normal(normal,point):
+    pass
+
+def check_for_collision(cuboid1,cuboid2):
+
+    pass
 
 #MAIN OF THE PROGRAM
 if __name__ == "__main__":
-    c = cuboid([0,0,0],[0,0,0],[3,1,2])
-    initial_corners = c.get_initial_corners()
-    rot_mat = c.get_rotation_matrix()
-    new_corners = c.get_new_corners(rot_mat,initial_corners)
+    reference_cuboid = cuboid([0,0,0],[0,0,0],[3,1,2])
+
+    test_1 = cuboid([0,1,0],[0,0,0],[0.8,0.8,0.8])
+    #c = cuboid([0,0,0],[0,0,0],[3,1,2])
+
+    reference_new_corners = reference_cuboid.get_new_corners()
+    list1 = get_points_for_normals(reference_new_corners)
+
+    #test1_new_corners = test_1.get_new_corners()
 
