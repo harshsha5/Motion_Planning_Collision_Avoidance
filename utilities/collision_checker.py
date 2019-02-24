@@ -22,9 +22,9 @@ class cuboid:
     d_y_half = self.dimensions[1]/2
     d_z_half = self.dimensions[2]/2
 
-    d_x = [d_x_half,-1*d_x_half]
-    d_y = [d_y_half,-1*d_y_half]
-    d_z = [d_z_half,-1*d_z_half]
+    d_x = [self.origin[0] + d_x_half,self.origin[0] - d_x_half]
+    d_y = [self.origin[1] + d_y_half,self.origin[1] - d_y_half]
+    d_z = [self.origin[2] + d_z_half,self.origin[2] - d_z_half]
 
     initial_corners = []
 
@@ -69,6 +69,7 @@ def get_projections_from_normal(normal,points):
     try:
         normal = normal/np.linalg.norm(normal)
         normal = np.reshape(normal,(1,3))
+        print("Unit normal is \n",normal,"\n")
         projections = np.dot(normal,points)
         return np.amax(projections),np.amin(projections)
     except:
@@ -84,9 +85,9 @@ def collision_check_along_normal(max1,min1,max2,min2):
 def points_to_collision(points_1,points_2,normal):
     max1,min1 = get_projections_from_normal(normal,points_1)
     max2,min2 = get_projections_from_normal(normal,points_2)
-    print("\n Normal is \n",normal,"\n")
+    #print("\n Normal is \n",normal,"\n")
     print(max1,"\t",min1,"\t",max2,"\t",min2,"\n")
-    ipdb.set_trace()
+    #ipdb.set_trace()
     return collision_check_along_normal(max1,min1,max2,min2)
 
 def check_for_collision(cuboid1,cuboid2):
@@ -101,10 +102,15 @@ def check_for_collision(cuboid1,cuboid2):
 if __name__ == "__main__":
     reference_cuboid = cuboid([0,0,0],[0,0,0],[3,1,2])
 
-    test_1 = cuboid([0,1,0],[0,0,0],[0.8,0.8,0.8])
+    #test_1 = cuboid([0,1,0],[0,0,0],[0.8,0.8,0.8])
+    # test_2 = cuboid([1.5,-1.5,0],[1,0,1.5],[1,3,3])
+    # test_3 = cuboid([0,0,-1],[0,0,0],[2,3,1])
+    # test_4 = cuboid([3,0,0],[0,0,0],[3,1,1])
+    # test_5 = cuboid([-1,0,-2],[-5,0,0.4],[2,0.7,2])
+    check = cuboid([10,10,10],[0,0,0],[3,1,2])
     #c = cuboid([0,0,0],[0,0,0],[3,1,2])
 
-    if(check_for_collision(reference_cuboid,test_1)):
+    if(check_for_collision(reference_cuboid,check)):
         print("In collision \n")
     else:
         print("Not colliding \n")
