@@ -5,6 +5,8 @@ import sys
 import time
 
 sys.path.append(os.getcwd())
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
+
 try:
     from lib import vrep
 except:
@@ -119,7 +121,7 @@ def get_object_position(clientID, handle, relative_to_handle=-1):
     '''Return the object position in reference to the relative handle.'''
     response, position = vrep.simxGetObjectPosition(clientID, 
                                                     handle,
-                                                    relative_to_handle)
+                                                    relative_to_handle,vrep.simx_opmode_blocking)
     if response != 0:
         print("Error: Cannot query position for handle {} with reference to {}".
                 format(handle, relative_to_handle))
@@ -129,7 +131,7 @@ def get_object_orientation(clientID, handle, reference_handle=-1):
     '''Return the object orientation in reference to the relative handle.'''
     response, orientation = vrep.simxGetObjectOrientation(clientID, 
                                                           handle,
-                                                          relative_to_handle)
+                                                          reference_handle,vrep.simx_opmode_blocking)
     if response != 0:
         print("Error: Cannot query position for handle {} with reference to {}".
                 format(handle, reference_handle))
@@ -144,8 +146,7 @@ def get_object_bounding_box(clientID, handle):
     position_to_value = {}
     for pos in position_to_param_id.keys():
         param_id = position_to_param_id[pos]
-        response, value = vrep.simxGetObjectFloatParameter(
-                clientID, handle, param_id)
+        response, value = vrep.simxGetObjectFloatParameter(clientID, handle, param_id, vrep.simx_opmode_blocking)
         if response != 0:
             print("Error {}: Cannot get value for param {}".format(
                 response, pos))
