@@ -51,21 +51,20 @@ class cuboid:
 
 def collision_check_along_cuboid_normals(new_corners,points_2):    #EDIT CODE FOR OPTIMISING IT. CHECK ONE NORMAL AND THEN IF SEPERATION EXISTS COMMENT NP COLLISION
     normal_1 = new_corners[:,0:3]
-    if(!points_to_collision(new_corners,points_2,normal_1)):
+    if(not points_to_collision(new_corners,points_2,normal_1)):
         return False
 
     normal_2 = np.hstack((np.vstack(new_corners[:,0:2]),np.reshape(new_corners[:,5],(3,1))))    #Why is vertical stack working in the interior bracket?
-    if(!points_to_collision(new_corners,points_2,normal_2)):
+    if(not points_to_collision(new_corners,points_2,normal_2)):
         return False   
 
     normal_3 = np.transpose(np.reshape(np.hstack((np.hstack((new_corners[:,0],new_corners[:,2])),new_corners[:,6])),(3,3)))
-    if(!points_to_collision(new_corners,points_2,normal_3)):
+    if(not points_to_collision(new_corners,points_2,normal_3)):
         return False   
 
     return True
 
 def get_projections_from_normal(normal,points):
-    print("Actual normal is \n",normal,"\n")
     normal = np.cross((normal[:,2] - normal[:,0]),(normal[:,1] - normal[:,0]))
     try:
         normal = normal/np.linalg.norm(normal)
@@ -85,13 +84,18 @@ def collision_check_along_normal(max1,min1,max2,min2):
 def points_to_collision(points_1,points_2,normal):
     max1,min1 = get_projections_from_normal(normal,points_1)
     max2,min2 = get_projections_from_normal(normal,points_2)
+    print("\n Normal is \n",normal,"\n")
+    print(max1,"\t",min1,"\t",max2,"\t",min2,"\n")
     ipdb.set_trace()
     return collision_check_along_normal(max1,min1,max2,min2)
 
 def check_for_collision(cuboid1,cuboid2):
-    
-
-    pass
+    points1 = cuboid1.get_new_corners()
+    points2 = cuboid2.get_new_corners()
+    if(collision_check_along_cuboid_normals(points1,points2) and collision_check_along_cuboid_normals(points2,points1)):
+        return True
+    else:
+        return False
 
 #MAIN OF THE PROGRAM
 if __name__ == "__main__":
@@ -100,8 +104,8 @@ if __name__ == "__main__":
     test_1 = cuboid([0,1,0],[0,0,0],[0.8,0.8,0.8])
     #c = cuboid([0,0,0],[0,0,0],[3,1,2])
 
-    reference_new_corners = reference_cuboid.get_new_corners()
-    list1 = get_points_for_normals(reference_new_corners)
-
-    #test1_new_corners = test_1.get_new_corners()
+    if(check_for_collision(reference_cuboid,test_1)):
+        print("In collision \n")
+    else:
+        print("Not colliding \n")
 
