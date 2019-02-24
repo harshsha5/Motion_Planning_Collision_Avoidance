@@ -49,16 +49,47 @@ class cuboid:
     print("New corner points are: \n",new_corners,"\n")
     return new_corners
 
-def get_points_for_normals(new_corners):    #EDIT CODE FOR OPTIMISING IT. CHECK ONE NORMAL AND THEN IF SEPERATION EXISTS COMMENT NP COLLISION
+def collision_check_along_cuboid_normals(new_corners,points_2):    #EDIT CODE FOR OPTIMISING IT. CHECK ONE NORMAL AND THEN IF SEPERATION EXISTS COMMENT NP COLLISION
     normal_1 = new_corners[:,0:3]
-    normal_2 = np.hstack((np.vstack(new_corners[:,0:2]),np.reshape(new_corners[:,5],(3,1))))    #Why is vertical stack working in the interior bracket?
-    normal_3 = np.transpose(np.reshape(np.hstack((np.hstack((new_corners[:,0],new_corners[:,2])),new_corners[:,6])),(3,3)))
-    return [normal_1,normal_2,normal_3]
+    if(!points_to_collision(new_corners,points_2,normal_1)):
+        return False
 
-def get_projection_from_normal(normal,point):
-    pass
+    normal_2 = np.hstack((np.vstack(new_corners[:,0:2]),np.reshape(new_corners[:,5],(3,1))))    #Why is vertical stack working in the interior bracket?
+    if(!points_to_collision(new_corners,points_2,normal_2)):
+        return False   
+
+    normal_3 = np.transpose(np.reshape(np.hstack((np.hstack((new_corners[:,0],new_corners[:,2])),new_corners[:,6])),(3,3)))
+    if(!points_to_collision(new_corners,points_2,normal_3)):
+        return False   
+
+    return True
+
+def get_projections_from_normal(normal,points):
+    print("Actual normal is \n",normal,"\n")
+    normal = np.cross((normal[:,2] - normal[:,0]),(normal[:,1] - normal[:,0]))
+    try:
+        normal = normal/np.linalg.norm(normal)
+        normal = np.reshape(normal,(1,3))
+        projections = np.dot(normal,points)
+        return np.amax(projections),np.amin(projections)
+    except:
+        print("Incorrect normal vector. Error in get_projection_from_normal")
+        return None,None
+
+def collision_check_along_normal(max1,min1,max2,min2):
+    if((min1<=min2 and min2<=max1) or (min1<=max2 and max2<=max1) or (min2<=min1 and min1<=max2) or(min2<=max1 and max1<=max2)):
+        return True
+    else:
+        return False
+
+def points_to_collision(points_1,points_2,normal):
+    max1,min1 = get_projections_from_normal(normal,points_1)
+    max2,min2 = get_projections_from_normal(normal,points_2)
+    ipdb.set_trace()
+    return collision_check_along_normal(max1,min1,max2,min2)
 
 def check_for_collision(cuboid1,cuboid2):
+    
 
     pass
 
