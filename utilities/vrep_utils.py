@@ -31,6 +31,17 @@ ARM_JOINT_NAMES = ['joint_1', # revolute / arm_base_link <- shoulder_link
 N_ARM_JOINTS = len(ARM_JOINT_NAMES)
 ARM_JOINT_HANDLES = None
 
+COLLISION_CUBOID_NAMES = ['arm_base_link_joint_collision_cuboid', # revolute / arm_base_link <- shoulder_link
+                          'shoulder_link_collision_cuboid', # revolute / shoulder_link <- elbow_link
+                          'elbow_link_collision_cuboid', # revolute / elbow_link <- forearm_link
+                          'forearm_link_collision_cuboid', # revolute / forearm_link <- wrist_link
+                          'gripper_link_collision_cuboid', # revolute / wrist_link <- gripper_link
+                          'finger_r_collision_cuboid', # prismatic / gripper_link <- finger_r
+                          'finger_l_collision_cuboid'] # prismatic / gripper_link <- finger_l
+
+
+COLLISION_CUBOID_HANDLES = None
+
 ### Utilities #################################################################
 
 def connect_to_vrep():
@@ -168,6 +179,13 @@ def get_arm_joint_handles(clientID):
         # Cache arm joint handles to avoid repeated handle requests
         ARM_JOINT_HANDLES = [get_handle_by_name(clientID, j) for j in ARM_JOINT_NAMES]
     return ARM_JOINT_HANDLES
+
+def get_collision_cuboid_handles(clientID):
+    global COLLISION_CUBOID_HANDLES
+    if not COLLISION_CUBOID_HANDLES:
+        # Cache collision cuboid handles to avoid repeated handle requests
+        COLLISION_CUBOID_HANDLES = [get_handle_by_name(clientID, j) for j in COLLISION_CUBOID_NAMES]
+    return COLLISION_CUBOID_HANDLES
 
 def get_arm_joint_positions(clientID):
     joint_handles = get_arm_joint_handles(clientID)
