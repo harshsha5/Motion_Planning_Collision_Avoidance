@@ -1,11 +1,13 @@
 # Import system libraries
+from __future__ import division #This is essential to do floor division in python 2.7
 import os
 import sys
 import time
 import numpy as np
 import ipdb
-from scipy.spatial.transform import Rotation as R
+# from scipy.spatial.transform import Rotation as R
 import transforms3d
+
 
 class cuboid:
   def __init__(self, origin, orientation, dimensions):
@@ -20,11 +22,11 @@ class cuboid:
     '''
     c_x = self.origin[0]
     c_y = self.origin[1]
-    c_z = self.origin[2]
+    c_z = self.origin[2]  
 
     d_x_half = self.dimensions[0]/2
     d_y_half = self.dimensions[1]/2
-    d_z_half = self.dimensions[2]/2
+    d_z_half = self.dimensions[2]/2 
 
     d_x = [self.origin[0] + d_x_half,self.origin[0] - d_x_half]
     d_y = [self.origin[1] + d_y_half,self.origin[1] - d_y_half]
@@ -88,15 +90,17 @@ def get_projections_from_normal(normal,points):
     This function converts the normal points to a normal. Makes a unit vector of the normal and then finds the max and min projection of the new
     corners along this normal
     '''
+    epsilon = 0.000001
     normal = np.cross((normal[:,2] - normal[:,0]),(normal[:,1] - normal[:,0]))
+    print(normal)
     try:
-        normal = normal/np.linalg.norm(normal)
+        normal = normal/(np.linalg.norm(normal) + epsilon)    #+epsilon
         normal = np.reshape(normal,(1,3))
         print("Unit normal is \n",normal,"\n")
         projections = np.dot(normal,points)
         return np.amax(projections),np.amin(projections)
     except:
-        print("Incorrect normal vector. Error in get_projection_from_normal")
+        print("Except block executes. Incorrect normal vector. Error in get_projection_from_normal")
         return None,None
 
 def collision_check_along_normal(max1,min1,max2,min2):
@@ -121,10 +125,38 @@ def points_to_collision(points_1,points_2,normal):
     #ipdb.set_trace()
     return collision_check_along_normal(max1,min1,max2,min2)
 
-def check_for_collision(cuboid1,cuboid2):
+def check_for_collision_along_surface_normals(cuboid1,cuboid2):
     points1 = cuboid1.get_new_corners()
     points2 = cuboid2.get_new_corners()
     if(collision_check_along_cuboid_normals(points1,points2) and collision_check_along_cuboid_normals(points2,points1)):
+        return True
+    else:
+        return False
+
+def collision_check_along_cross_product_of_edges(points1,points2):
+    cross_product_np = find_cross_products_of_edges(points1,points2)
+
+def find_cross_products_of_edges(points1,points2):
+    epsilon = 0.000001
+    edge_list_1_np = get_edge_list(points1)
+    edge_list_2_np = get_edge_list(points2)
+    cross_product_np =np.zeros((3,9))
+    for i in range(edge_list_1_np.shape[0]):
+        cross_product_np[:,3*i:3*(i+1)] = np.cross(edge_list_1_np[:,i],edge_list_2_np,axisa = 0,axisb = 0,axisc = 0)
+        #print(np.cross(edge_list_1_np[:,i],edge_list_2_np,axisa = 0,axisb = 0,axisc = 0))
+    cross_product_np = cross_product_np/(np.linalg.norm(cross_product_np,axis=0) +epsilon)
+    ipdb.set_trace()
+    return cross_product_np
+
+def get_edge_list(points):
+    edge_list = [points[:,1] - points[:,0],points[:,2] - points[:,0],points[:,4] - points[:,0]]
+    return np.transpose(np.asarray(edge_list))
+
+def check_for_collision_between_cuboids(cuboid1,cuboid2):
+    points1 = cuboid1.get_new_corners()
+    points2 = cuboid2.get_new_corners()
+    if(collision_check_along_cuboid_normals(points1,points2) and collision_check_along_cuboid_normals(points2,points1) and 
+        collision_check_along_cross_product_of_edges(points1,points2)): 
         return True
     else:
         return False
@@ -133,15 +165,19 @@ def check_for_collision(cuboid1,cuboid2):
 if __name__ == "__main__":
     reference_cuboid = cuboid([0,0,0],[0,0,0],[3,1,2])
 
-    #test_1 = cuboid([0,1,0],[0,0,0],[0.8,0.8,0.8])
-    # test_2 = cuboid([1.5,-1.5,0],[1,0,1.5],[1,3,3])
+    test_1 = cuboid([0,1,0],[0,0,0],[0.8,0.8,0.8])
+    test_2 = cuboid([1.5,-1.5,0],[1,0,1.5],[1,3,3])
     test_3 = cuboid([0,0,-1],[0,0,0],[2,3,1])
-    # test_4 = cuboid([3,0,0],[0,0,0],[3,1,1])
-    # test_5 = cuboid([-1,0,-2],[-5,0,0.4],[2,0.7,2])
+    test_4 = cuboid([3,0,0],[0,0,0],[3,1,1])
+    test_5 = cuboid([-1,0,-2],[-5,0,0.4],[2,0.7,2])
+    test_6 = cuboid([1.8,0.5,1.5],[-0.2,0.5,0],[1,3,1])
+    test_7 = cuboid([0,-1.2,0.4],[0,0.785,0.785],[1,1,1])
+    test_8 = cuboid([-0.8,0,-0.5],[0,0,0.2],[1,0.5,0.5])
     # check = cuboid([10,10,10],[0,0,0],[3,1,2])
     #c = cuboid([0,0,0],[0,0,0],[3,1,2])
 
-    if(check_for_collision(reference_cuboid,test_3)):
+    # if(check_for_collision_along_surface_normals(reference_cuboid,test_8)):
+    if(check_for_collision_between_cuboids(reference_cuboid,test_8)):
         print("In collision \n")
     else:
         print("Not colliding \n")
