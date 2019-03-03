@@ -94,7 +94,7 @@ def get_projections_from_normal(normal,points):
     normal = np.cross((normal[:,2] - normal[:,0]),(normal[:,1] - normal[:,0]))
     print(normal)
     try:
-        normal = normal/(np.linalg.norm(normal) + epsilon)    #+epsilon
+        normal = normal/(np.linalg.norm(normal) + epsilon)    
         normal = np.reshape(normal,(1,3))
         print("Unit normal is \n",normal,"\n")
         projections = np.dot(normal,points)
@@ -135,6 +135,23 @@ def check_for_collision_along_surface_normals(cuboid1,cuboid2):
 
 def collision_check_along_cross_product_of_edges(points1,points2):
     cross_product_np = find_cross_products_of_edges(points1,points2)
+    result = check_for_projections_along_cross_product_np(cross_product_np,points1,points2)
+    print(result)
+    ipdb.set_trace()
+    return result
+
+def check_for_projections_along_cross_product_np(cross_product_np,points1,points2):
+    for i in range(cross_product_np.shape[1]):
+        print("Iteration number ",i)
+        max_1,min_1 = see_max_min_of_projections_along_cp(points1,cross_product_np[:,i])
+        max_2,min_2 = see_max_min_of_projections_along_cp(points2,cross_product_np[:,i])
+        if(not collision_check_along_normal(max_1,min_1,max_2,min_2)):
+            return False
+    return True
+
+def see_max_min_of_projections_along_cp(points,cross_product_vector):
+    projections = np.dot(np.transpose(cross_product_vector),points)
+    return np.amax(projections),np.amin(projections)
 
 def find_cross_products_of_edges(points1,points2):
     epsilon = 0.000001
@@ -145,7 +162,6 @@ def find_cross_products_of_edges(points1,points2):
         cross_product_np[:,3*i:3*(i+1)] = np.cross(edge_list_1_np[:,i],edge_list_2_np,axisa = 0,axisb = 0,axisc = 0)
         #print(np.cross(edge_list_1_np[:,i],edge_list_2_np,axisa = 0,axisb = 0,axisc = 0))
     cross_product_np = cross_product_np/(np.linalg.norm(cross_product_np,axis=0) +epsilon)
-    ipdb.set_trace()
     return cross_product_np
 
 def get_edge_list(points):
@@ -177,7 +193,7 @@ if __name__ == "__main__":
     #c = cuboid([0,0,0],[0,0,0],[3,1,2])
 
     # if(check_for_collision_along_surface_normals(reference_cuboid,test_8)):
-    if(check_for_collision_between_cuboids(reference_cuboid,test_8)):
+    if(check_for_collision_between_cuboids(reference_cuboid,test_1)):
         print("In collision \n")
     else:
         print("Not colliding \n")
