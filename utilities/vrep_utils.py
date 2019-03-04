@@ -20,7 +20,8 @@ import numpy as np
 STREAMING_HANDLES_JOINT_POSITION = Set([])
 STREAMING_HANDLES_JOINT_FORCE = Set([])
 
-ARM_JOINT_NAMES = ['joint_1', # revolute / arm_base_link <- shoulder_link
+ARM_JOINT_NAMES = [
+                    'joint_1', # revolute / arm_base_link <- shoulder_link
                    'joint_2', # revolute / shoulder_link <- elbow_link
                    'joint_3', # revolute / elbow_link <- forearm_link
                    'joint_4', # revolute / forearm_link <- wrist_link
@@ -41,6 +42,17 @@ COLLISION_CUBOID_NAMES = ['arm_base_link_joint_collision_cuboid', # revolute / a
 
 
 COLLISION_CUBOID_HANDLES = None
+
+STATIC_CUBOID_NAMES = ['cuboid_0', 
+                          'cuboid_1', 
+                          'cuboid_2', 
+                          'cuboid_3', 
+                          'cuboid_4', 
+                          'cuboid_5' 
+                       ] 
+
+
+STATIC_CUBOID_HANDLES = None
 
 ### Utilities #################################################################
 
@@ -186,6 +198,13 @@ def get_collision_cuboid_handles(clientID):
         # Cache collision cuboid handles to avoid repeated handle requests
         COLLISION_CUBOID_HANDLES = [get_handle_by_name(clientID, j) for j in COLLISION_CUBOID_NAMES]
     return COLLISION_CUBOID_HANDLES
+
+def get_static_cuboid_handles(clientID):
+    global STATIC_CUBOID_HANDLES
+    if not STATIC_CUBOID_HANDLES:
+        # Cache collision cuboid handles to avoid repeated handle requests
+        STATIC_CUBOID_HANDLES = [get_handle_by_name(clientID, j) for j in STATIC_CUBOID_NAMES]
+    return STATIC_CUBOID_HANDLES
 
 def get_arm_joint_positions(clientID):
     joint_handles = get_arm_joint_handles(clientID)

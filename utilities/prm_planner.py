@@ -13,6 +13,7 @@ from collections import defaultdict
 from urdf_parser_py.urdf import URDF
 import locobot_joint_ctrl as ctrl
 import pdb
+import pickle
 
 class Graph: 
     #NOTE: Reference stated in the documentation of the program
@@ -91,10 +92,9 @@ def get_forward_kinematics(joint_angles,robot_model):
 
 def get_random_joint_angles():      #Edit this so that it returns a 1 X 7 numpy array
     # random.randrange(-90, 90.1, 0.5)
-    # return 360*np.random.rand(5)
     return np.random.uniform(-90,90,5)          #THE JOINT LIMITS ARE HARD CODED AS OF NOW. CHANGE WRT THE URDF
 
-def check_if_state_is_collision_free(clientID,random_joint_angles,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid):
+def check_if_state_is_collision_free(clientID,random_joint_angles,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list):
     '''
     INPUT: random_joint_angles- (7,) Numpy vector
            robot_model a Model object
@@ -113,6 +113,17 @@ def check_if_state_is_collision_free(clientID,random_joint_angles,robot_model,ro
         cuboid_temp = collision_checker.cuboid(pos,[al,be,ga],dim)
         joint_cuboid_list.append(cuboid_temp)
 
+    for i,elt in enumerate(joint_cuboid_list):
+        for j,elo in enumerate(static_cuboid_list):
+            if(collision_checker.check_for_collision_between_cuboids(elt,elo)):
+                return False
+
+    for i in range(len(joint_cuboid_list)-1):
+        for j in range(1+len(joint_cuboid_list))
+            if(collision_checker.check_for_collision_between_cuboids(joint_cuboid_list[i],joint_cuboid_list[j])):
+                return False
+
+    return True
 
 def add_state_to_graph_as_vertex(g,joint_angle_array):
     S = State()
@@ -131,6 +142,7 @@ def make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample = 100):
     arm_handles = vu.get_arm_joint_handles(clientID)
     initialize_graph(clientID,g)
     robot_cuboid_dimensions = get_robot_cuboid_dimensions(clientID)
+    static_cuboid_list = get_static_cuboids(clientID)
     #tf_bw_joint_cuboid_centroid = np.load("tf_bw_joint_cuboid_centroid.npy")
     for i in range(number_of_points_to_sample):
         random_joint_angles = get_random_joint_angles()
@@ -138,9 +150,24 @@ def make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample = 100):
         random_joint_angles = np.hstack((random_joint_angles,finger_angle))
         # joint_positions =vu.get_arm_joint_positions(clientID)
         #previous_joint_positions = joint_positions
-        if(check_if_state_is_collision_free(clientID,random_joint_angles,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid)):   #THIS IS CORRECT
+        if(check_if_state_is_collision_free(clientID,random_joint_angles,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list)):   #THIS IS CORRECT
             print("hi")
     pass
+
+def get_static_cuboids(clientID):               #YET TO TEST
+    '''
+    OUTPUT: Returns the list of static cuboids as objects of the class cuboid (in collision checker)
+    '''
+    all_static_cuboid_positions,all_static_cuboid_orientations,static_cuboid_bounding_boxes_dimensions = loc_bb.static_cuboid_configurations(clientID)
+    '''
+    all_static_cuboid_positions: a 6X3 Numpy array, for 6 static cuboids and x,y,z ie. 3
+    all_static_cuboid_orientations: a 6X3 Numpy array, for 6 static cuboids and x,y,z ie. 3
+    static_cuboid_bounding_boxes_dimensions: a 6X3 Numpy array, Dimension of x,y,z for 6 cuboids
+    '''
+    static_cuboid_list = []
+    for i in range(all_static_cuboid_positions.shape[0]):
+        static_cuboid_list.append(collision_checker.cuboid(all_static_cuboid_positions[i,:].tolist(),all_static_cuboid_orientations[i:].tolist(),static_cuboid_bounding_boxes_dimensions[i:].tolist()))   
+    return static_cuboid_list
 
 def get_robot_cuboid_dimensions(clientID):
     '''
@@ -225,17 +252,17 @@ def control_locobot(joint_targets,clientID):
     # print(initial_joint_orientation)
     # np.save("initial_joint_pos",initial_joint_pos)
     # np.save("initial_joint_orientation",initial_joint_orientation)
-    get_tf_bw_joint_and_bb(clientID)
+    # get_tf_bw_joint_and_bb(clientID)
     vu.stop_sim(clientID)
 
-def get_tf_bw_joint_and_bb(clientID):
+def get_tf_bw_joint_and_bb(clientID):       #YET TO TEST
     '''
     OUTPUT: Outputs the transform between the various joints and their corresponding collision cuboid. Returns a 4X4X7 np matrix
     '''
     all_collision_cuboid_positions,all_collision_cuboid_orientations = np.asarray(loc_bb.collision_cuboid_configurations(clientID))
     all_joint_pos,all_joint_orientation = np.asarray(loc_bb.arm_configurations(clientID))
     tf_bw_joint_and_bb_list = np.zeros((4,4,all_joint_pos.shape[0]))
-    for i,elt in enumerate(all_joint_pos.shape[0]):
+    for i in range(all_joint_pos.shape[0]):
         R = transforms3d.euler.euler2mat(all_joint_orientation[i,0], all_joint_orientation[i,1], all_joint_orientation[i,2], 'sxyz') #SOURCE OF ERROR- see xyz correct or not
         p = np.reshape(all_joint_pos[i,:],(3,1))
         H_JtoO = np.vstack(np.hstack(R,p),[[0,0,0,1]])
@@ -258,6 +285,7 @@ if __name__ == "__main__":
     #CHANGE ABSOLUTE PATH TO URDF FILE
     # urdf_xml = "/Users/harsh/Desktop/CMU_Sem_2/Robot_Autonomy/Assignments/hw1_release/locobot_description_v3.urdf"
     # robot_model = get_model_from_URDF(urdf_xml)
+
     initial_state_file1 = "/Users/harsh/Desktop/CMU_Sem_2/Robot_Autonomy/Assignments/hw2_release/code/utilities/initial_joint_pos.npy"
     initial_state_file2 = "/Users/harsh/Desktop/CMU_Sem_2/Robot_Autonomy/Assignments/hw2_release/code/utilities/initial_joint_orientation.npy"
     g = Graph() 
@@ -265,8 +293,10 @@ if __name__ == "__main__":
     robot_model = Model()
     initialize_model(initial_state_file1,initial_state_file2,robot_model)
     #make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample)
-    target_positions = [[0,0,0,0,0,0,0]]
-    control_locobot(target_positions,clientID)
+    # target_positions = [[0,0,0,0,0,0,0]]
+    # control_locobot(target_positions,clientID)
+    get_static_cuboids(clientID)
+
 
 
 
