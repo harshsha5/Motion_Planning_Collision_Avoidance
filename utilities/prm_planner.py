@@ -56,6 +56,15 @@ class State:
         self.joint_6 = state[5]
         self.joint_7 = state[6]   
 
+# class State:
+#     # Constructor 
+#     def __init__(self,count,state_pos): 
+  
+#         # default dictionary to store state in the graph
+#         self.id = count
+#         self.pos = state_pos
+
+
 #Storing Model: Assume obj to have 3 numpy arrays- Position,Rotation and Axis.
 #Position is 3X7. Axis is 3X7. ANd rotation is 3X7
 
@@ -75,13 +84,14 @@ class Model:
 def get_forward_kinematics(joint_angles,robot_model):
     homo_matrix_list = []
     present_net_homo = np.zeros((4,4))
-    for i,elt in enumerate(joint_angles.shape[0]):
-        rpy = robot_model.rotation[i]                               #Assume angles provided by model is in Euler format
-        net_rotation = rpy + joint_angles[i]*robot_model.axis[i]
+    for i in range(joint_angles.shape[0]):
+        rpy = robot_model.rotation[i,:]                               #Assume angles provided by model is in Euler format
+        net_rotation = rpy + joint_angles[i]*robot_model.axis[i,:]
         R = transforms3d.euler.euler2mat(net_rotation[0], net_rotation[1], net_rotation[2], 'sxyz') #SOURCE OF ERROR- see xyz correct or not
-        p = robot_model.position[i] 
-        homo_temp = np.vstack(np.hstack(R,p),[[0,0,0,1]])
-        present_net_homo = np.matmul(present_net_homo,homo_temp)
+        p = np.reshape(robot_model.position[i,:],(3,1)) 
+        # pdb.set_trace()
+        homo_temp = np.vstack((np.hstack((R,p)),np.array([0,0,0,1])))
+        present_net_homo = np.dot(present_net_homo,homo_temp)
         homo_matrix_list.append(present_net_homo)
     return homo_matrix_list
 
@@ -105,8 +115,8 @@ def check_if_state_is_collision_free(clientID,random_joint_angles,robot_model,ro
     joint_cuboid_list =[]
     homo_matrix_list = get_forward_kinematics(random_joint_angles,robot_model)
     for i,elt in enumerate(homo_matrix_list):
-        H_base_to_cc = np.matmul(elt,tf_bw_joint_cuboid_centroid[:,:,i])
-        al, be, ga = mat2euler(H_base_to_cc, 'sxyz')
+        H_base_to_cc = np.dot(elt,tf_bw_joint_cuboid_centroid[:,:,i])
+        al, be, ga = transforms3d.euler.mat2euler(H_base_to_cc, 'sxyz')
         pos = H_base_to_cc[0:3,3]
         pos = pos.tolist()
         dim = robot_cuboid_dimensions[i,:].tolist()
@@ -115,13 +125,15 @@ def check_if_state_is_collision_free(clientID,random_joint_angles,robot_model,ro
 
     for i,elt in enumerate(joint_cuboid_list):
         for j,elo in enumerate(static_cuboid_list):
+            # print(i,j)
+            # pdb.set_trace()
             if(collision_checker.check_for_collision_between_cuboids(elt,elo)):
                 return False
 
-    for i in range(len(joint_cuboid_list)-1):
-        for j in range(1+len(joint_cuboid_list))
-            if(collision_checker.check_for_collision_between_cuboids(joint_cuboid_list[i],joint_cuboid_list[j])):
-                return False
+    # for i in range(len(joint_cuboid_list)-1):
+    #     for j in range(1+len(joint_cuboid_list)):
+    #         if(collision_checker.check_for_collision_between_cuboids(joint_cuboid_list[i],joint_cuboid_list[j])):
+    #             return False
 
     return True
 
@@ -135,6 +147,10 @@ def initialize_graph(clientID,g):
     initial_joint_angles = vu.get_arm_joint_positions(clientID)
     add_state_to_graph_as_vertex(g,initial_joint_angles)
 
+# def get_nearest_neighbours(vertex_list,S):
+#     dist = map(lambda x,y:x+y, a,b)
+# dist = numpy.linalg.norm(a-b)
+
 def make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample = 100):
     '''
     The graph phase of the PRM
@@ -143,18 +159,25 @@ def make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample = 100):
     initialize_graph(clientID,g)
     robot_cuboid_dimensions = get_robot_cuboid_dimensions(clientID)
     static_cuboid_list = get_static_cuboids(clientID)
-    #tf_bw_joint_cuboid_centroid = np.load("tf_bw_joint_cuboid_centroid.npy")
+    tf_bw_joint_cuboid_centroid = np.load("tf_bw_joint_cuboid_centroid.npy")
     for i in range(number_of_points_to_sample):
         random_joint_angles = get_random_joint_angles()
         finger_angle = np.array([0,0])                              #Initial angle for fingers. MUST CHANGE!
         random_joint_angles = np.hstack((random_joint_angles,finger_angle))
+        random_joint_angles = np.array([0,1.0472,-1.309,-1.309,0,-0.03,0.03])
         # joint_positions =vu.get_arm_joint_positions(clientID)
         #previous_joint_positions = joint_positions
         if(check_if_state_is_collision_free(clientID,random_joint_angles,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list)):   #THIS IS CORRECT
-            print("hi")
+            add_state_to_graph_as_vertex(g,random_joint_angles)
+            print("Hi")
+            # vertex_list = g.keys()
+            # get_nearest_neighbours(vertex_list,S)
+
+    print("Done")
+
     pass
 
-def get_static_cuboids(clientID):               #YET TO TEST
+def get_static_cuboids(clientID):            
     '''
     OUTPUT: Returns the list of static cuboids as objects of the class cuboid (in collision checker)
     '''
@@ -166,7 +189,7 @@ def get_static_cuboids(clientID):               #YET TO TEST
     '''
     static_cuboid_list = []
     for i in range(all_static_cuboid_positions.shape[0]):
-        static_cuboid_list.append(collision_checker.cuboid(all_static_cuboid_positions[i,:].tolist(),all_static_cuboid_orientations[i:].tolist(),static_cuboid_bounding_boxes_dimensions[i:].tolist()))   
+        static_cuboid_list.append(collision_checker.cuboid(all_static_cuboid_positions[i,:].tolist(),all_static_cuboid_orientations[i,:].tolist(),static_cuboid_bounding_boxes_dimensions[i,:].tolist()))   
     return static_cuboid_list
 
 def get_robot_cuboid_dimensions(clientID):
@@ -255,7 +278,7 @@ def control_locobot(joint_targets,clientID):
     # get_tf_bw_joint_and_bb(clientID)
     vu.stop_sim(clientID)
 
-def get_tf_bw_joint_and_bb(clientID):       #YET TO TEST
+def get_tf_bw_joint_and_bb(clientID):       
     '''
     OUTPUT: Outputs the transform between the various joints and their corresponding collision cuboid. Returns a 4X4X7 np matrix
     '''
@@ -265,13 +288,12 @@ def get_tf_bw_joint_and_bb(clientID):       #YET TO TEST
     for i in range(all_joint_pos.shape[0]):
         R = transforms3d.euler.euler2mat(all_joint_orientation[i,0], all_joint_orientation[i,1], all_joint_orientation[i,2], 'sxyz') #SOURCE OF ERROR- see xyz correct or not
         p = np.reshape(all_joint_pos[i,:],(3,1))
-        H_JtoO = np.vstack(np.hstack(R,p),[[0,0,0,1]])
+        H_JtoO = np.vstack((np.hstack((R,p)),np.array([0,0,0,1])))
         R2 = transforms3d.euler.euler2mat(all_collision_cuboid_orientations[i,0], all_collision_cuboid_orientations[i,1], all_collision_cuboid_orientations[i,2], 'sxyz') #SOURCE OF ERROR- see xyz correct or not
         p2 = np.reshape(all_collision_cuboid_positions[i,:],(3,1))
-        H_JtoC = np.vstack(np.hstack(R2,p2),[[0,0,0,1]])
-        tf_bw_joint_and_bb_list[:,:,i] = np.matmul(H_JtoO,np.linalg.inv(H_JtoC))
-    np.save("tf_bw_joint_cuboid_centroid.npy",tf_bw_joint_and_bb_list)
-    pdb.set_trace()
+        H_JtoC = np.vstack((np.hstack((R2,p2)),np.array([0,0,0,1])))
+        tf_bw_joint_and_bb_list[:,:,i] = np.dot(H_JtoO,np.linalg.inv(H_JtoC))
+    # np.save("tf_bw_joint_cuboid_centroid.npy",tf_bw_joint_and_bb_list)
 
 if __name__ == "__main__":
 
@@ -292,10 +314,10 @@ if __name__ == "__main__":
     number_of_points_to_sample = 1
     robot_model = Model()
     initialize_model(initial_state_file1,initial_state_file2,robot_model)
-    #make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample)
+    make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample)
     # target_positions = [[0,0,0,0,0,0,0]]
     # control_locobot(target_positions,clientID)
-    get_static_cuboids(clientID)
+    # get_static_cuboids(clientID)
 
 
 

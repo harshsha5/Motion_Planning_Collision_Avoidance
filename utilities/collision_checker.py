@@ -40,7 +40,7 @@ class cuboid:
                 initial_corners.append([elt_x,elt_y,elt_z])
 
     initial_corners = np.transpose(np.asarray(initial_corners))
-    print("Old corner points are: \n",initial_corners,"\n")
+    # print("Old corner points are: \n",initial_corners,"\n")
     return initial_corners
 
   def get_rotation_matrix(self):
@@ -60,7 +60,7 @@ class cuboid:
     initial_corners = self.get_initial_corners()
     rot_mat = self.get_rotation_matrix()
     new_corners = np.dot(rot_mat,initial_corners)
-    print("New corner points are: \n",new_corners,"\n")
+    # print("New corner points are: \n",new_corners,"\n")
     return new_corners
 
 def collision_check_along_cuboid_normals(new_corners,points_2):    #EDIT CODE FOR OPTIMISING IT. CHECK ONE NORMAL AND THEN IF SEPERATION EXISTS COMMENT NP COLLISION
@@ -92,11 +92,11 @@ def get_projections_from_normal(normal,points):
     '''
     epsilon = 0.000001
     normal = np.cross((normal[:,2] - normal[:,0]),(normal[:,1] - normal[:,0]))
-    print(normal)
+    # print(normal)
     try:
         normal = normal/(np.linalg.norm(normal) + epsilon)    
         normal = np.reshape(normal,(1,3))
-        print("Unit normal is \n",normal,"\n")
+        # print("Unit normal is \n",normal,"\n")
         projections = np.dot(normal,points)
         return np.amax(projections),np.amin(projections)
     except:
@@ -121,7 +121,7 @@ def points_to_collision(points_1,points_2,normal):
     max1,min1 = get_projections_from_normal(normal,points_1)
     max2,min2 = get_projections_from_normal(normal,points_2)
     #print("\n Normal is \n",normal,"\n")
-    print(max1,"\t",min1,"\t",max2,"\t",min2,"\n")
+    # print(max1,"\t",min1,"\t",max2,"\t",min2,"\n")
     #ipdb.set_trace()
     return collision_check_along_normal(max1,min1,max2,min2)
 
@@ -136,13 +136,11 @@ def check_for_collision_along_surface_normals(cuboid1,cuboid2):
 def collision_check_along_cross_product_of_edges(points1,points2):
     cross_product_np = find_cross_products_of_edges(points1,points2)
     result = check_for_projections_along_cross_product_np(cross_product_np,points1,points2)
-    print(result)
-    ipdb.set_trace()
     return result
 
 def check_for_projections_along_cross_product_np(cross_product_np,points1,points2):
     for i in range(cross_product_np.shape[1]):
-        print("Iteration number ",i)
+        # print("Iteration number ",i)
         max_1,min_1 = see_max_min_of_projections_along_cp(points1,cross_product_np[:,i])
         max_2,min_2 = see_max_min_of_projections_along_cp(points2,cross_product_np[:,i])
         if(not collision_check_along_normal(max_1,min_1,max_2,min_2)):
