@@ -30,31 +30,31 @@ class Graph:
     def addVertex(self,u):
         self.graph[u] = []
 
-class State:
-    # Constructor 
-    def __init__(self): 
+# class State:
+#     # Constructor 
+#     def __init__(self): 
   
-        # default dictionary to store state in the graph
-        self.joint_1 = None
-        self.joint_2 = None
-        self.joint_3 = None
-        self.joint_4 = None
-        self.joint_5 = None
-        self.joint_6 = None
-        self.joint_7 = None
+#         # default dictionary to store state in the graph
+#         self.joint_1 = None
+#         self.joint_2 = None
+#         self.joint_3 = None
+#         self.joint_4 = None
+#         self.joint_5 = None
+#         self.joint_6 = None
+#         self.joint_7 = None
   
-    # function to add an edge to graph 
-    def create_state(self,state): 
-        '''
-        state is a numpy array of 1X7. For this particular use case joint_6 and joint_7 are always fixed which are the fingers of the robot gripper.
-        '''
-        self.joint_1 = state[0]
-        self.joint_2 = state[1]
-        self.joint_3 = state[2]
-        self.joint_4 = state[3]
-        self.joint_5 = state[4]
-        self.joint_6 = state[5]
-        self.joint_7 = state[6]   
+#     # function to add an edge to graph 
+#     def create_state(self,state): 
+#         '''
+#         state is a numpy array of 1X7. For this particular use case joint_6 and joint_7 are always fixed which are the fingers of the robot gripper.
+#         '''
+#         self.joint_1 = state[0]
+#         self.joint_2 = state[1]
+#         self.joint_3 = state[2]
+#         self.joint_4 = state[3]
+#         self.joint_5 = state[4]
+#         self.joint_6 = state[5]
+#         self.joint_7 = state[6]   
 
 # class State:
 #     # Constructor 
@@ -83,7 +83,7 @@ class Model:
 
 def get_forward_kinematics(joint_angles,robot_model):
     homo_matrix_list = []
-    present_net_homo = np.zeros((4,4))
+    present_net_homo = np.identity(4)
     for i in range(joint_angles.shape[0]):
         rpy = robot_model.rotation[i,:]                               #Assume angles provided by model is in Euler format
         net_rotation = rpy + joint_angles[i]*robot_model.axis[i,:]
@@ -102,7 +102,23 @@ def get_forward_kinematics(joint_angles,robot_model):
 
 def get_random_joint_angles():      #Edit this so that it returns a 1 X 7 numpy array
     # random.randrange(-90, 90.1, 0.5)
-    return np.random.uniform(-90,90,5)          #THE JOINT LIMITS ARE HARD CODED AS OF NOW. CHANGE WRT THE URDF
+    return np.random.uniform(-np.pi/2,np.pi/2,5)          #THE JOINT LIMITS ARE HARD CODED AS OF NOW. CHANGE WRT THE URDF
+
+def add_state_to_graph_as_vertex(g,vertex_number):
+    '''
+    This function simply adds the vertex to the graph (with no edge)
+    '''
+    g.addVertex(vertex_number)
+    #see if return by value or by reference
+
+def initialize_graph(clientID,g,vertex_state_list):
+    initial_joint_angles = vu.get_arm_joint_positions(clientID)
+    vertex_state_list.append(np.asarray(initial_joint_angles))
+    add_state_to_graph_as_vertex(g,0)
+
+# def get_nearest_neighbours(vertex_list,S):
+#     dist = map(lambda x,y:x+y, a,b)
+# dist = numpy.linalg.norm(a-b)
 
 def check_if_state_is_collision_free(clientID,random_joint_angles,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list):
     '''
@@ -130,6 +146,7 @@ def check_if_state_is_collision_free(clientID,random_joint_angles,robot_model,ro
             if(collision_checker.check_for_collision_between_cuboids(elt,elo)):
                 return False
 
+    '''CHECK FOR SELF COLLISION'''
     # for i in range(len(joint_cuboid_list)-1):
     #     for j in range(1+len(joint_cuboid_list)):
     #         if(collision_checker.check_for_collision_between_cuboids(joint_cuboid_list[i],joint_cuboid_list[j])):
@@ -137,45 +154,60 @@ def check_if_state_is_collision_free(clientID,random_joint_angles,robot_model,ro
 
     return True
 
-def add_state_to_graph_as_vertex(g,joint_angle_array):
-    S = State()
-    S.create_state(joint_angle_array)
-    g.addVertex(S)
-    #see if return by value or by reference
-
-def initialize_graph(clientID,g):
-    initial_joint_angles = vu.get_arm_joint_positions(clientID)
-    add_state_to_graph_as_vertex(g,initial_joint_angles)
-
-# def get_nearest_neighbours(vertex_list,S):
-#     dist = map(lambda x,y:x+y, a,b)
-# dist = numpy.linalg.norm(a-b)
-
 def make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample = 100):
     '''
     The graph phase of the PRM
+    OUTPUT: Will return the graph g and the vertex_state_list which is a numpy list of angles of the various vertices
+    Note: The number_of_points_to_sample indicate that these many vertices should be accepted. It does NOT mean that many vertices
+            will be sampled. So count only increases if a vertex is accepted. 
     '''
     arm_handles = vu.get_arm_joint_handles(clientID)
-    initialize_graph(clientID,g)
+    vertex_state_list = []
+    initialize_graph(clientID,g,vertex_state_list)
     robot_cuboid_dimensions = get_robot_cuboid_dimensions(clientID)
     static_cuboid_list = get_static_cuboids(clientID)
     tf_bw_joint_cuboid_centroid = np.load("tf_bw_joint_cuboid_centroid.npy")
-    for i in range(number_of_points_to_sample):
+    count = 1
+    while count< number_of_points_to_sample:
         random_joint_angles = get_random_joint_angles()
-        finger_angle = np.array([0,0])                              #Initial angle for fingers. MUST CHANGE!
-        random_joint_angles = np.hstack((random_joint_angles,finger_angle))
-        random_joint_angles = np.array([0,1.0472,-1.309,-1.309,0,-0.03,0.03])
+        finger_pos = np.array([-0.03,0.03])                              #Initial angle for fingers. MUST CHANGE!
+        random_joint_angles = np.hstack((random_joint_angles,finger_pos))
+        # random_joint_angles = np.array([0,1.0472,-1.309,-1.309,0,-0.03,0.03])
+        # random_joint_angles = np.array([0,0,0,0,0,-0.03,0.03])
         # joint_positions =vu.get_arm_joint_positions(clientID)
         #previous_joint_positions = joint_positions
-        if(check_if_state_is_collision_free(clientID,random_joint_angles,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list)):   #THIS IS CORRECT
-            add_state_to_graph_as_vertex(g,random_joint_angles)
-            print("Hi")
-            # vertex_list = g.keys()
-            # get_nearest_neighbours(vertex_list,S)
+        print("Vertex sampled is ",random_joint_angles,"\n")
+        if(check_if_state_is_collision_free(clientID,random_joint_angles,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list)):   
+            nearest_neighbours = get_nearest_neighbours(vertex_state_list,random_joint_angles)
+            add_state_to_graph_as_vertex(g,count)
+            vertex_state_list.append(random_joint_angles)
+            print("Vertex added to graph")
+
+            #connect(vertex_list_by_distance,g,vertex_state_list,random_joint_angles)
+
+            count+=1
+        else:
+            print("Vertex rejected")
 
     print("Done")
-
+    pdb.set_trace()
     pass
+
+def get_nearest_neighbours(vertex_state_list,sampled_vertex):
+    '''
+    Input: The list of all the vertices and the newly sampled vertex
+    Output: The indexes of the 3 closest vertices in the form of a numpy array
+    '''
+    #dist_np_array = np.empty((len(vertex_state_list,1)))
+    nearest_neighbours_to_take = 3                              #This specifies the number of nearest neighbors to consider
+    vertex_state_list = np.asarray(vertex_state_list)
+    dist = np.linalg.norm(vertex_state_list-sampled_vertex,axis=1) #dist is expected to be a column numpy array
+    vertex_list_by_distance = np.argsort(dist)
+    if(vertex_list_by_distance.shape[0]>nearest_neighbours_to_take-1):     
+        return vertex_list_by_distance[0:nearest_neighbours_to_take]
+    else:
+        return vertex_list_by_distance
+
 
 def get_static_cuboids(clientID):            
     '''
@@ -311,7 +343,7 @@ if __name__ == "__main__":
     initial_state_file1 = "/Users/harsh/Desktop/CMU_Sem_2/Robot_Autonomy/Assignments/hw2_release/code/utilities/initial_joint_pos.npy"
     initial_state_file2 = "/Users/harsh/Desktop/CMU_Sem_2/Robot_Autonomy/Assignments/hw2_release/code/utilities/initial_joint_orientation.npy"
     g = Graph() 
-    number_of_points_to_sample = 1
+    number_of_points_to_sample = 2
     robot_model = Model()
     initialize_model(initial_state_file1,initial_state_file2,robot_model)
     make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample)
