@@ -176,22 +176,47 @@ def make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample = 100):
         # random_joint_angles = np.array([0,0,0,0,0,-0.03,0.03])
         # joint_positions =vu.get_arm_joint_positions(clientID)
         #previous_joint_positions = joint_positions
-        print("Vertex sampled is ",random_joint_angles,"\n")
+        # print("Vertex sampled is ",random_joint_angles,"\n")
         if(check_if_state_is_collision_free(clientID,random_joint_angles,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list)):   
+            print("Vertex ",count," added to graph","\n")
             nearest_neighbours = get_nearest_neighbours(vertex_state_list,random_joint_angles)
             add_state_to_graph_as_vertex(g,count)
             vertex_state_list.append(random_joint_angles)
-            print("Vertex added to graph")
+            # print("Vertex added to graph")
 
-            #connect(vertex_list_by_distance,g,vertex_state_list,random_joint_angles)
+            for neighbor in nearest_neighbours:
+                if(connect(neighbor,vertex_state_list,clientID,random_joint_angles,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list)):
+                    g.addEdge(neighbor,len(vertex_state_list)-1)
+                    g.addEdge(len(vertex_state_list)-1,neighbor)
 
             count+=1
-        else:
-            print("Vertex rejected")
+            pdb.set_trace()
+        # else:
+        #     print("Vertex rejected")
 
     print("Done")
     pdb.set_trace()
     pass
+
+def connect(neighbor,vertex_state_list,clientID,random_joint_angles,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list):
+    '''
+    INPUT: int neighbor (Index of the neighbour in vertex_state_list) 
+           vertex_state_list (The entire list of states)
+    OUTPUT: Returns true if path between the two positions is collision free and thus, the two points can be connected via edges
+
+    You have two positions in the Cfree space, we take the difference of these and discretize the path in between these two positions in discretization_steps
+    number of steps and check for collision of each.
+    '''
+    discretization_steps = 10
+    step_size_for_each_joint = (vertex_state_list[neighbor] - vertex_state_list[-1])/discretization_steps
+    for i in range(discretization_steps):
+        new_position = vertex_state_list[-1] + (i+1)*step_size_for_each_joint 
+        if(not (check_if_state_is_collision_free(clientID,new_position,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list))):
+            print("Connect test failed for ",i+1, " iteration ","\n")
+            return False
+    print("Vertex ",neighbor," and ",len(vertex_state_list)-1," connected \n")
+    return True
+
 
 def get_nearest_neighbours(vertex_state_list,sampled_vertex):
     '''
@@ -343,7 +368,7 @@ if __name__ == "__main__":
     initial_state_file1 = "/Users/harsh/Desktop/CMU_Sem_2/Robot_Autonomy/Assignments/hw2_release/code/utilities/initial_joint_pos.npy"
     initial_state_file2 = "/Users/harsh/Desktop/CMU_Sem_2/Robot_Autonomy/Assignments/hw2_release/code/utilities/initial_joint_orientation.npy"
     g = Graph() 
-    number_of_points_to_sample = 2
+    number_of_points_to_sample = 10
     robot_model = Model()
     initialize_model(initial_state_file1,initial_state_file2,robot_model)
     make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample)
