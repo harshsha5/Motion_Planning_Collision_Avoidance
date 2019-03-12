@@ -30,43 +30,8 @@ class Graph:
     def addVertex(self,u):
         self.graph[u] = []
 
-# class State:
-#     # Constructor 
-#     def __init__(self): 
-  
-#         # default dictionary to store state in the graph
-#         self.joint_1 = None
-#         self.joint_2 = None
-#         self.joint_3 = None
-#         self.joint_4 = None
-#         self.joint_5 = None
-#         self.joint_6 = None
-#         self.joint_7 = None
-  
-#     # function to add an edge to graph 
-#     def create_state(self,state): 
-#         '''
-#         state is a numpy array of 1X7. For this particular use case joint_6 and joint_7 are always fixed which are the fingers of the robot gripper.
-#         '''
-#         self.joint_1 = state[0]
-#         self.joint_2 = state[1]
-#         self.joint_3 = state[2]
-#         self.joint_4 = state[3]
-#         self.joint_5 = state[4]
-#         self.joint_6 = state[5]
-#         self.joint_7 = state[6]   
-
-# class State:
-#     # Constructor 
-#     def __init__(self,count,state_pos): 
-  
-#         # default dictionary to store state in the graph
-#         self.id = count
-#         self.pos = state_pos
-
-
-#Storing Model: Assume obj to have 3 numpy arrays- Position,Rotation and Axis.
-#Position is 3X7. Axis is 3X7. ANd rotation is 3X7
+    def show_graph(self):
+        print(self.graph.items())
 
 class Model:
     def __init__(self): 
@@ -161,16 +126,24 @@ def make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample = 100):
     Note: The number_of_points_to_sample indicate that these many vertices should be accepted. It does NOT mean that many vertices
             will be sampled. So count only increases if a vertex is accepted. 
     '''
-    arm_handles = vu.get_arm_joint_handles(clientID)
+    #Tunable Parameters
+    nearest_neighbours_to_take = 3  #This specifies the number of nearest neighbors to consider
+
+    #Initializations
     vertex_state_list = []
-    initialize_graph(clientID,g,vertex_state_list)
+    count = 0
+
+    #Get information
+    arm_handles = vu.get_arm_joint_handles(clientID)
     robot_cuboid_dimensions = get_robot_cuboid_dimensions(clientID)
     static_cuboid_list = get_static_cuboids(clientID)
     tf_bw_joint_cuboid_centroid = np.load("tf_bw_joint_cuboid_centroid.npy")
-    count = 1
+
+    #initialize_graph(clientID,g,vertex_state_list) #Remove this line
+
     while count< number_of_points_to_sample:
         random_joint_angles = get_random_joint_angles()
-        finger_pos = np.array([-0.03,0.03])                              #Initial angle for fingers. MUST CHANGE!
+        finger_pos = np.array([-0.03,0.03])                              #Initial angle for fingers. MUST CHANGE as required!
         random_joint_angles = np.hstack((random_joint_angles,finger_pos))
         # random_joint_angles = np.array([0,1.0472,-1.309,-1.309,0,-0.03,0.03])
         # random_joint_angles = np.array([0,0,0,0,0,-0.03,0.03])
@@ -179,24 +152,25 @@ def make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample = 100):
         # print("Vertex sampled is ",random_joint_angles,"\n")
         if(check_if_state_is_collision_free(clientID,random_joint_angles,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list)):   
             print("Vertex ",count," added to graph","\n")
-            nearest_neighbours = get_nearest_neighbours(vertex_state_list,random_joint_angles)
             add_state_to_graph_as_vertex(g,count)
             vertex_state_list.append(random_joint_angles)
+            count+=1
+            if(len(vertex_state_list)==1):
+                continue
+            nearest_neighbours = get_nearest_neighbours(vertex_state_list,random_joint_angles,nearest_neighbours_to_take)
             # print("Vertex added to graph")
 
             for neighbor in nearest_neighbours:
                 if(connect(neighbor,vertex_state_list,clientID,random_joint_angles,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list)):
                     g.addEdge(neighbor,len(vertex_state_list)-1)
                     g.addEdge(len(vertex_state_list)-1,neighbor)
-
-            count+=1
-            pdb.set_trace()
         # else:
         #     print("Vertex rejected")
 
     print("Done")
-    pdb.set_trace()
-    pass
+    g.show_graph()
+    # pdb.set_trace()
+    return g,vertex_state_list
 
 def connect(neighbor,vertex_state_list,clientID,random_joint_angles,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list):
     '''
@@ -212,20 +186,19 @@ def connect(neighbor,vertex_state_list,clientID,random_joint_angles,robot_model,
     for i in range(discretization_steps):
         new_position = vertex_state_list[-1] + (i+1)*step_size_for_each_joint 
         if(not (check_if_state_is_collision_free(clientID,new_position,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list))):
-            print("Connect test failed for ",i+1, " iteration ","\n")
+            # print("Connect test failed for ",i+1, " iteration ","\n")
             return False
     print("Vertex ",neighbor," and ",len(vertex_state_list)-1," connected \n")
     return True
 
 
-def get_nearest_neighbours(vertex_state_list,sampled_vertex):
+def get_nearest_neighbours(vertex_state_list,sampled_vertex,nearest_neighbours_to_take = 5):
     '''
     Input: The list of all the vertices and the newly sampled vertex
     Output: The indexes of the 3 closest vertices in the form of a numpy array
     '''
-    #dist_np_array = np.empty((len(vertex_state_list,1)))
-    nearest_neighbours_to_take = 3                              #This specifies the number of nearest neighbors to consider
-    vertex_state_list = np.asarray(vertex_state_list)
+
+    vertex_state_list = np.asarray(vertex_state_list[:-1])
     dist = np.linalg.norm(vertex_state_list-sampled_vertex,axis=1) #dist is expected to be a column numpy array
     vertex_list_by_distance = np.argsort(dist)
     if(vertex_list_by_distance.shape[0]>nearest_neighbours_to_take-1):     
@@ -368,10 +341,20 @@ if __name__ == "__main__":
     initial_state_file1 = "/Users/harsh/Desktop/CMU_Sem_2/Robot_Autonomy/Assignments/hw2_release/code/utilities/initial_joint_pos.npy"
     initial_state_file2 = "/Users/harsh/Desktop/CMU_Sem_2/Robot_Autonomy/Assignments/hw2_release/code/utilities/initial_joint_orientation.npy"
     g = Graph() 
-    number_of_points_to_sample = 10
+    number_of_points_to_sample = 0
     robot_model = Model()
     initialize_model(initial_state_file1,initial_state_file2,robot_model)
-    make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample)
+    g,vertex_state_list = make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample)
+
+    #Enter start and end position of the robot in degrees for revolute joints and in meters for prismatic joints
+    START_ROBOT_POSITION = np.array([-80,0,0,0,0,-0.03,0.03])   #Note: The last two joints are prismatic
+    GOAL_ROBOT_POSITION = np.array([0,60,-75,-75,0,-0.03,0.03]) #Note: The last two joints are prismatic
+
+    #degree to radians conversions for angles
+    START_ROBOT_POSITION[0:5] = np.radians(START_ROBOT_POSITION[0:5])
+    GOAL_ROBOT_POSITION[0:5] = np.radians(GOAL_ROBOT_POSITION[0:5])
+
+
     # target_positions = [[0,0,0,0,0,0,0]]
     # control_locobot(target_positions,clientID)
     # get_static_cuboids(clientID)
