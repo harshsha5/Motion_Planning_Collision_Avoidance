@@ -14,6 +14,7 @@ from urdf_parser_py.urdf import URDF
 import locobot_joint_ctrl as ctrl
 import pdb
 import pickle
+import dijkastra
 
 class Graph: 
     #NOTE: Reference stated in the documentation of the program
@@ -32,6 +33,26 @@ class Graph:
 
     def show_graph(self):
         print(self.graph.items())
+
+    def remove_non_connected_vertices(self,vertex_state_list):
+        '''
+        Removes the vertices from the graph and vertex_state_list which are empty
+        Note: If you directly delete by looping it will lead to wrong output in case there are continious unconnected vertices (Just because that's how python works- deleting from the iterator whihc is looping)
+        So, to handle that, first we identify the to be deleted indices, put them in decending order and then delete from the vertex_state_list and the graph
+        to avoid indexing issues with simultaneous looping and deleting items from the iterator
+        '''
+        vertices_to_remove = []
+        for key,value in self.graph.items():
+            if(len(value)==0):
+                vertices_to_remove.append(key)
+
+        vertices_to_remove.sort(reverse=True)
+
+        print(vertices_to_remove)
+
+        for key in vertices_to_remove:
+            del self.graph[key]
+            del vertex_state_list[key]
 
 class Model:
     def __init__(self): 
@@ -162,13 +183,17 @@ def make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample = 100):
 
             for neighbor in nearest_neighbours:
                 if(connect(neighbor,vertex_state_list,clientID,random_joint_angles,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list)):
-                    g.addEdge(neighbor,len(vertex_state_list)-1)
-                    g.addEdge(len(vertex_state_list)-1,neighbor)
+                    cost = np.linalg.norm(vertex_state_list[neighbor] - random_joint_angles)
+                    g.addEdge(neighbor,[len(vertex_state_list)-1,cost])
+                    g.addEdge(len(vertex_state_list)-1,[neighbor,cost])
         # else:
         #     print("Vertex rejected")
 
     print("Done")
+    g.remove_non_connected_vertices(vertex_state_list)
     g.show_graph()
+    print("\n")
+    print(vertex_state_list)
     # pdb.set_trace()
     return g,vertex_state_list
 
@@ -191,6 +216,54 @@ def connect(neighbor,vertex_state_list,clientID,random_joint_angles,robot_model,
     print("Vertex ",neighbor," and ",len(vertex_state_list)-1," connected \n")
     return True
 
+def connect_start_and_goal_with_graph(g,vertex_state_list,START_ROBOT_POSITION,GOAL_ROBOT_POSITION,clientID,robot_model):
+    #Tunable Parameters
+    nearest_neighbours_to_take = len(vertex_state_list)  #This specifies the number of nearest neighbors to consider
+
+    #Get information
+    arm_handles = vu.get_arm_joint_handles(clientID)
+    robot_cuboid_dimensions = get_robot_cuboid_dimensions(clientID)
+    static_cuboid_list = get_static_cuboids(clientID)
+    tf_bw_joint_cuboid_centroid = np.load("tf_bw_joint_cuboid_centroid.npy")
+
+    if(not check_if_state_is_collision_free(clientID,START_ROBOT_POSITION,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list)): 
+        print("Start position in collision")
+        return g,vertex_state_list
+
+    if(not check_if_state_is_collision_free(clientID,GOAL_ROBOT_POSITION,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list)): 
+        print("Goal position in collision")
+        return  g,vertex_state_list
+
+    add_state_to_graph_as_vertex(g,len(vertex_state_list))  
+    vertex_state_list.append(START_ROBOT_POSITION)      #Adding the start robot position to the vertex_state_list. This will ultimately be the second last element in the list, goal being the last.
+    if(len(vertex_state_list)==1):
+            pass
+    else:
+        nearest_neighbours = get_nearest_neighbours(vertex_state_list,START_ROBOT_POSITION,nearest_neighbours_to_take)
+
+        for neighbor in nearest_neighbours:
+            if(connect(neighbor,vertex_state_list,clientID,START_ROBOT_POSITION,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list)):
+                cost = np.linalg.norm(vertex_state_list[neighbor] - START_ROBOT_POSITION)
+                g.addEdge(neighbor,[len(vertex_state_list)-1,cost])
+                g.addEdge(len(vertex_state_list)-1,[neighbor,cost])
+                break
+
+    add_state_to_graph_as_vertex(g,len(vertex_state_list))  
+    vertex_state_list.append(GOAL_ROBOT_POSITION)      #Adding the goal robot position to the vertex_state_list as the last index. 
+
+    nearest_neighbours = get_nearest_neighbours(vertex_state_list,GOAL_ROBOT_POSITION,nearest_neighbours_to_take)
+
+    for neighbor in nearest_neighbours:
+        if(connect(neighbor,vertex_state_list,clientID,GOAL_ROBOT_POSITION,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list)):
+            cost = np.linalg.norm(vertex_state_list[neighbor] - GOAL_ROBOT_POSITION)
+            g.addEdge(neighbor,[len(vertex_state_list)-1,cost])
+            g.addEdge(len(vertex_state_list)-1,[neighbor,cost])
+            break
+    print("\n")
+    g.show_graph()
+    print("\n")
+    print(vertex_state_list)
+    return g,vertex_state_list
 
 def get_nearest_neighbours(vertex_state_list,sampled_vertex,nearest_neighbours_to_take = 5):
     '''
@@ -338,12 +411,17 @@ if __name__ == "__main__":
     # urdf_xml = "/Users/harsh/Desktop/CMU_Sem_2/Robot_Autonomy/Assignments/hw1_release/locobot_description_v3.urdf"
     # robot_model = get_model_from_URDF(urdf_xml)
 
+    #CHANGE THIS PATH TO ABSOLUTE!
     initial_state_file1 = "/Users/harsh/Desktop/CMU_Sem_2/Robot_Autonomy/Assignments/hw2_release/code/utilities/initial_joint_pos.npy"
     initial_state_file2 = "/Users/harsh/Desktop/CMU_Sem_2/Robot_Autonomy/Assignments/hw2_release/code/utilities/initial_joint_orientation.npy"
+
+    #Initializations
     g = Graph() 
-    number_of_points_to_sample = 0
+    number_of_points_to_sample = 10
     robot_model = Model()
     initialize_model(initial_state_file1,initial_state_file2,robot_model)
+
+    #Preprocessing Phase: Make the PRM graph
     g,vertex_state_list = make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample)
 
     #Enter start and end position of the robot in degrees for revolute joints and in meters for prismatic joints
@@ -354,6 +432,8 @@ if __name__ == "__main__":
     START_ROBOT_POSITION[0:5] = np.radians(START_ROBOT_POSITION[0:5])
     GOAL_ROBOT_POSITION[0:5] = np.radians(GOAL_ROBOT_POSITION[0:5])
 
+    #Query Phase: Connect start and goal positions to the graph
+    g,vertex_state_list = connect_start_and_goal_with_graph(g,vertex_state_list,START_ROBOT_POSITION,GOAL_ROBOT_POSITION,clientID,robot_model)
 
     # target_positions = [[0,0,0,0,0,0,0]]
     # control_locobot(target_positions,clientID)
