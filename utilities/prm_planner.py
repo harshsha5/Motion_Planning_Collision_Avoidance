@@ -191,9 +191,9 @@ def make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample = 100):
 
     print("Done")
     g.remove_non_connected_vertices(vertex_state_list)
-    g.show_graph()
-    print("\n")
-    print(vertex_state_list)
+    # g.show_graph()
+    # print("\n")
+    # print(vertex_state_list)
     # pdb.set_trace()
     return g,vertex_state_list
 
@@ -259,10 +259,10 @@ def connect_start_and_goal_with_graph(g,vertex_state_list,START_ROBOT_POSITION,G
             g.addEdge(neighbor,[len(vertex_state_list)-1,cost])
             g.addEdge(len(vertex_state_list)-1,[neighbor,cost])
             break
-    print("\n")
+    # print("\n")
     g.show_graph()
     print("\n")
-    print(vertex_state_list)
+    # print(vertex_state_list)
     return g,vertex_state_list
 
 def get_nearest_neighbours(vertex_state_list,sampled_vertex,nearest_neighbours_to_take = 5):
@@ -425,7 +425,8 @@ if __name__ == "__main__":
     g,vertex_state_list = make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample)
 
     #Enter start and end position of the robot in degrees for revolute joints and in meters for prismatic joints
-    START_ROBOT_POSITION = np.array([-80,0,0,0,0,-0.03,0.03])   #Note: The last two joints are prismatic
+    # START_ROBOT_POSITION = np.array([-80,0,0,0,0,-0.03,0.03])   #Note: The last two joints are prismatic
+    START_ROBOT_POSITION = np.array([0,55,-75,-75,0,-0.03,0.03])  #Note: The last two joints are prismatic
     GOAL_ROBOT_POSITION = np.array([0,60,-75,-75,0,-0.03,0.03]) #Note: The last two joints are prismatic
 
     #degree to radians conversions for angles
@@ -434,7 +435,9 @@ if __name__ == "__main__":
 
     #Query Phase: Connect start and goal positions to the graph
     g,vertex_state_list = connect_start_and_goal_with_graph(g,vertex_state_list,START_ROBOT_POSITION,GOAL_ROBOT_POSITION,clientID,robot_model)
-
+    source = len(vertex_state_list)-2
+    goal = len(vertex_state_list)-1
+    path = dijkastra.dijkstra(g,source, goal)
     # target_positions = [[0,0,0,0,0,0,0]]
     # control_locobot(target_positions,clientID)
     # get_static_cuboids(clientID)
