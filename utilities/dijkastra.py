@@ -36,10 +36,11 @@ def dijkstra(g,source, dest):
     while unvisited_vertices:
 
         current_vertex = min(unvisited_vertices, key=lambda vertex: distance[vertex])
+        print(current_vertex,"\n")
 
         if distance[current_vertex] == inf:
-            print("No path Found")
-            return
+            print("Process done..")
+            break
 
         for neighbor,cost in g.graph[current_vertex]:
             new_possible_route = distance[current_vertex] + cost

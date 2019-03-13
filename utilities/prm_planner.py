@@ -34,24 +34,6 @@ class Graph:
     def show_graph(self):
         print(self.graph.items())
 
-    # def remove_non_connected_vertices(self,vertex_state_list):
-    #     '''
-    #     Removes the vertices from the graph and vertex_state_list which are empty
-    #     Note: If you directly delete by looping it will lead to wrong output in case there are continious unconnected vertices (Just because that's how python works- deleting from the iterator whihc is looping)
-    #     So, to handle that, first we identify the to be deleted indices, put them in decending order and then delete from the graph
-    #     to avoid indexing issues with simultaneous looping and deleting items from the iterator
-    #     '''
-    #     vertices_to_remove = []
-    #     for key,value in self.graph.items():
-    #         if(len(value)==0):
-    #             vertices_to_remove.append(key)
-
-    #     vertices_to_remove.sort(reverse=True)
-
-    #     for key in vertices_to_remove:
-    #         del self.graph[key]
-    #         del vertex_state_list[key] #Not removing the unconnected vertices from the vertex_state_list, else key in graph won't map to the state index
-
     def edit_graph_for_not_connected_vertices(self,vertex_state_list):
         new_graph = defaultdict(list) 
         new_state_list = []
@@ -245,11 +227,11 @@ def connect_start_and_goal_with_graph(g,vertex_state_list,START_ROBOT_POSITION,G
 
     if(not check_if_state_is_collision_free(clientID,START_ROBOT_POSITION,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list)): 
         print("Start position in collision")
-        return g,vertex_state_list
+        return g,vertex_state_list,-1
 
     if(not check_if_state_is_collision_free(clientID,GOAL_ROBOT_POSITION,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list)): 
         print("Goal position in collision")
-        return  g,vertex_state_list
+        return  g,vertex_state_list,-1
 
     add_state_to_graph_as_vertex(g,len(vertex_state_list))  
     vertex_state_list.append(START_ROBOT_POSITION)      #Adding the start robot position to the vertex_state_list. This will ultimately be the second last element in the list, goal being the last.
@@ -280,7 +262,7 @@ def connect_start_and_goal_with_graph(g,vertex_state_list,START_ROBOT_POSITION,G
     g.show_graph()
     print("\n")
     # print(vertex_state_list)
-    return g,vertex_state_list
+    return g,vertex_state_list,1
 
 def get_nearest_neighbours(vertex_state_list,sampled_vertex,nearest_neighbours_to_take = 5):
     '''
@@ -415,6 +397,14 @@ def get_tf_bw_joint_and_bb(clientID):
         tf_bw_joint_and_bb_list[:,:,i] = np.dot(H_JtoO,np.linalg.inv(H_JtoC))
     # np.save("tf_bw_joint_cuboid_centroid.npy",tf_bw_joint_and_bb_list)
 
+def get_target_positions(path,vertex_state_list):
+    target_positions = []
+    for index in path:
+        target_positions.append(vertex_state_list[index].tolist())
+
+    return target_positions
+
+
 if __name__ == "__main__":
 
     print ('Connecting to V-REP...')
@@ -442,25 +432,32 @@ if __name__ == "__main__":
     g,vertex_state_list = make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample)
 
     #Enter start and end position of the robot in degrees for revolute joints and in meters for prismatic joints
-    # START_ROBOT_POSITION = np.array([-80,0,0,0,0,-0.03,0.03])   #Note: The last two joints are prismatic
-    START_ROBOT_POSITION = np.array([0,55,-75,-75,0,-0.03,0.03])  #Note: The last two joints are prismatic
+    START_ROBOT_POSITION = np.array([-80,0,0,0,0,-0.03,0.03])   #Note: The last two joints are prismatic
+    # START_ROBOT_POSITION = np.array([0,55,-75,-75,0,-0.03,0.03])  #Note: The last two joints are prismatic
     GOAL_ROBOT_POSITION = np.array([0,60,-75,-75,0,-0.03,0.03]) #Note: The last two joints are prismatic
 
     #degree to radians conversions for angles
     START_ROBOT_POSITION[0:5] = np.radians(START_ROBOT_POSITION[0:5])
     GOAL_ROBOT_POSITION[0:5] = np.radians(GOAL_ROBOT_POSITION[0:5])
 
-    Query Phase: Connect start and goal positions to the graph
-    g,vertex_state_list = connect_start_and_goal_with_graph(g,vertex_state_list,START_ROBOT_POSITION,GOAL_ROBOT_POSITION,clientID,robot_model)
-    source = len(vertex_state_list)-2
-    goal = len(vertex_state_list)-1
-    path = dijkastra.dijkstra(g,source, goal)
-    print(path)
+    #Query Phase: Connect start and goal positions to the graph
+    g,vertex_state_list,flag = connect_start_and_goal_with_graph(g,vertex_state_list,START_ROBOT_POSITION,GOAL_ROBOT_POSITION,clientID,robot_model)
+    if(flag==1):
+        source = len(vertex_state_list)-2
+        goal = len(vertex_state_list)-1
+        path = dijkastra.dijkstra(g,source, goal)
+        print(path)
+
+        target_positions = get_target_positions(path,vertex_state_list)
+    else:
+        print("Incorrect Query given")
+
 
     #Controls Phase
     # target_positions = [[0,0,0,0,0,0,0]]
-    # control_locobot(target_positions,clientID)
-    # get_static_cuboids(clientID)
+    target_positions = [[-80,0,0,0,0,-0.03,0.03]]
+    control_locobot(target_positions,clientID)
+        # get_static_cuboids(clientID)
 
 
 
