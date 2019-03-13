@@ -34,25 +34,39 @@ class Graph:
     def show_graph(self):
         print(self.graph.items())
 
-    def remove_non_connected_vertices(self,vertex_state_list):
-        '''
-        Removes the vertices from the graph and vertex_state_list which are empty
-        Note: If you directly delete by looping it will lead to wrong output in case there are continious unconnected vertices (Just because that's how python works- deleting from the iterator whihc is looping)
-        So, to handle that, first we identify the to be deleted indices, put them in decending order and then delete from the vertex_state_list and the graph
-        to avoid indexing issues with simultaneous looping and deleting items from the iterator
-        '''
-        vertices_to_remove = []
+    # def remove_non_connected_vertices(self,vertex_state_list):
+    #     '''
+    #     Removes the vertices from the graph and vertex_state_list which are empty
+    #     Note: If you directly delete by looping it will lead to wrong output in case there are continious unconnected vertices (Just because that's how python works- deleting from the iterator whihc is looping)
+    #     So, to handle that, first we identify the to be deleted indices, put them in decending order and then delete from the graph
+    #     to avoid indexing issues with simultaneous looping and deleting items from the iterator
+    #     '''
+    #     vertices_to_remove = []
+    #     for key,value in self.graph.items():
+    #         if(len(value)==0):
+    #             vertices_to_remove.append(key)
+
+    #     vertices_to_remove.sort(reverse=True)
+
+    #     for key in vertices_to_remove:
+    #         del self.graph[key]
+    #         del vertex_state_list[key] #Not removing the unconnected vertices from the vertex_state_list, else key in graph won't map to the state index
+
+    def edit_graph_for_not_connected_vertices(self,vertex_state_list):
+        new_graph = defaultdict(list) 
+        new_state_list = []
+        # vertices_removed = []
+        count = 0
         for key,value in self.graph.items():
-            if(len(value)==0):
-                vertices_to_remove.append(key)
-
-        vertices_to_remove.sort(reverse=True)
-
-        print(vertices_to_remove)
-
-        for key in vertices_to_remove:
-            del self.graph[key]
-            del vertex_state_list[key]
+            if(not len(value)==0):
+                new_graph[count] = value
+                new_state_list.append(vertex_state_list[key])
+                count+=1
+            # else:
+            #     vertices_removed.append(key)
+        # print(vertices_removed)
+        self.graph = new_graph
+        return new_state_list
 
 class Model:
     def __init__(self): 
@@ -190,7 +204,10 @@ def make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample = 100):
         #     print("Vertex rejected")
 
     print("Done")
-    g.remove_non_connected_vertices(vertex_state_list)
+    # g.show_graph()
+    # print("\n")
+    # print(vertex_state_list)
+    vertex_state_list = g.edit_graph_for_not_connected_vertices(vertex_state_list)
     # g.show_graph()
     # print("\n")
     # print(vertex_state_list)
@@ -433,11 +450,14 @@ if __name__ == "__main__":
     START_ROBOT_POSITION[0:5] = np.radians(START_ROBOT_POSITION[0:5])
     GOAL_ROBOT_POSITION[0:5] = np.radians(GOAL_ROBOT_POSITION[0:5])
 
-    #Query Phase: Connect start and goal positions to the graph
+    Query Phase: Connect start and goal positions to the graph
     g,vertex_state_list = connect_start_and_goal_with_graph(g,vertex_state_list,START_ROBOT_POSITION,GOAL_ROBOT_POSITION,clientID,robot_model)
     source = len(vertex_state_list)-2
     goal = len(vertex_state_list)-1
     path = dijkastra.dijkstra(g,source, goal)
+    print(path)
+
+    #Controls Phase
     # target_positions = [[0,0,0,0,0,0,0]]
     # control_locobot(target_positions,clientID)
     # get_static_cuboids(clientID)
