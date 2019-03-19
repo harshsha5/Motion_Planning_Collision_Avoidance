@@ -101,7 +101,8 @@ def get_projections_from_normal(normal,points):
         return np.amax(projections),np.amin(projections)
     except:
         print("Except block executes. Incorrect normal vector. Error in get_projection_from_normal")
-        return None,None
+        exit()
+        #return None,None
 
 def collision_check_along_normal(max1,min1,max2,min2):
     '''

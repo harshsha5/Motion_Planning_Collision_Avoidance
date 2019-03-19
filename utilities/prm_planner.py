@@ -6,7 +6,7 @@ import numpy as np
 import transforms3d
 import vrep_utils as vu
 from random import random
-from random import seed
+#from random import seed
 import locobot_bounding_box as loc_bb
 import collision_checker
 from collections import defaultdict 
@@ -63,19 +63,35 @@ class Model:
         self.axis = initial_rotation
 
 
-def get_forward_kinematics(joint_angles,robot_model):
+def get_forward_kinematics(joint_angles,robot_model,tf_bw_joint_and_next_joint):
+    '''
+    Returns a list of H_OtoJ
+    '''
     homo_matrix_list = []
     present_net_homo = np.identity(4)
-    for i in range(joint_angles.shape[0]):
-        rpy = robot_model.rotation[i,:]                               #Assume angles provided by model is in Euler format
-        net_rotation = rpy + joint_angles[i]*robot_model.axis[i,:]
+    running_homo = np.identity(4)
+    for i in range(joint_angles.shape[0]):        #Note change of -2 (Since the fingers don't rotate)
+        # rpy = robot_model.rotation[i,:]                               #Assume angles provided by model is in Euler format
+        # net_rotation = rpy + joint_angles[i]*robot_model.axis[i,:]
+        if(i<=4):
+            net_rotation = joint_angles[i]*robot_model.axis[i,:]
+        else:
+            net_rotation = np.array([0,0,0])
         R = transforms3d.euler.euler2mat(net_rotation[0], net_rotation[1], net_rotation[2], 'sxyz') #SOURCE OF ERROR- see xyz correct or not
-        p = np.reshape(robot_model.position[i,:],(3,1)) 
+        #p = np.reshape(robot_model.position[i,:],(3,1)) 
+        p = np.array([[0],[0],[0]])
         # pdb.set_trace()
         homo_temp = np.vstack((np.hstack((R,p)),np.array([0,0,0,1])))
-        present_net_homo = np.dot(present_net_homo,homo_temp)
+        running_homo = np.dot(running_homo,tf_bw_joint_and_next_joint[:,:,i])
+        present_net_homo = np.dot(running_homo,homo_temp)
+        #present_net_homo = np.dot(present_net_homo,homo_temp)
         homo_matrix_list.append(present_net_homo)
     return homo_matrix_list
+
+#Find H0toJn use HJtoCn to find H0toCn
+#Do we neglect the last two joints (the fingers)
+
+#I want this to return HJtoO, so that I can then use my already computed HJtoC to get HCtoO, which can then be sent to check for collisions
 
 # def get_bb_transforms(clientID):
 #     homo_cuboid_list =[]
@@ -102,7 +118,7 @@ def initialize_graph(clientID,g,vertex_state_list):
 #     dist = map(lambda x,y:x+y, a,b)
 # dist = numpy.linalg.norm(a-b)
 
-def check_if_state_is_collision_free(clientID,random_joint_angles,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list):
+def check_if_state_is_collision_free(clientID,random_joint_angles,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list,tf_bw_joint_and_next_joint):
     '''
     INPUT: random_joint_angles- (7,) Numpy vector
            robot_model a Model object
@@ -111,8 +127,9 @@ def check_if_state_is_collision_free(clientID,random_joint_angles,robot_model,ro
     OUTPUT: Returns True if state is collision free
     '''
     joint_cuboid_list =[]
-    homo_matrix_list = get_forward_kinematics(random_joint_angles,robot_model)
+    homo_matrix_list = get_forward_kinematics(random_joint_angles,robot_model,tf_bw_joint_and_next_joint)
     for i,elt in enumerate(homo_matrix_list):
+        # H_base_to_cc = np.dot(np.linalg.inv(tf_bw_joint_cuboid_centroid[:,:,i]),elt)
         H_base_to_cc = np.dot(elt,tf_bw_joint_cuboid_centroid[:,:,i])
         al, be, ga = transforms3d.euler.mat2euler(H_base_to_cc, 'sxyz')
         pos = H_base_to_cc[0:3,3]
@@ -120,7 +137,7 @@ def check_if_state_is_collision_free(clientID,random_joint_angles,robot_model,ro
         dim = robot_cuboid_dimensions[i,:].tolist()
         cuboid_temp = collision_checker.cuboid(pos,[al,be,ga],dim)
         joint_cuboid_list.append(cuboid_temp)
-
+    pdb.set_trace()
     for i,elt in enumerate(joint_cuboid_list):
         for j,elo in enumerate(static_cuboid_list):
             # print(i,j)
@@ -155,6 +172,7 @@ def make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample = 100):
     robot_cuboid_dimensions = get_robot_cuboid_dimensions(clientID)
     static_cuboid_list = get_static_cuboids(clientID)
     tf_bw_joint_cuboid_centroid = np.load("tf_bw_joint_cuboid_centroid.npy")
+    tf_bw_joint_and_next_joint = np.load("tf_bw_joint_and_next_joint.npy")
 
     #initialize_graph(clientID,g,vertex_state_list) #Remove this line
 
@@ -163,11 +181,11 @@ def make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample = 100):
         finger_pos = np.array([-0.03,0.03])                              #Initial angle for fingers. MUST CHANGE as required!
         random_joint_angles = np.hstack((random_joint_angles,finger_pos))
         # random_joint_angles = np.array([0,1.0472,-1.309,-1.309,0,-0.03,0.03])
-        # random_joint_angles = np.array([0,0,0,0,0,-0.03,0.03])
+        random_joint_angles = np.array([-1.396,0,0,0,0,-0.03,0.03])
         # joint_positions =vu.get_arm_joint_positions(clientID)
         #previous_joint_positions = joint_positions
         # print("Vertex sampled is ",random_joint_angles,"\n")
-        if(check_if_state_is_collision_free(clientID,random_joint_angles,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list)):   
+        if(check_if_state_is_collision_free(clientID,random_joint_angles,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list,tf_bw_joint_and_next_joint)):   
             print("Vertex ",count," added to graph","\n")
             add_state_to_graph_as_vertex(g,count)
             vertex_state_list.append(random_joint_angles)
@@ -182,8 +200,8 @@ def make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample = 100):
                     cost = np.linalg.norm(vertex_state_list[neighbor] - random_joint_angles)
                     g.addEdge(neighbor,[len(vertex_state_list)-1,cost])
                     g.addEdge(len(vertex_state_list)-1,[neighbor,cost])
-        # else:
-        #     print("Vertex rejected")
+        else:
+            print("Vertex rejected")
 
     print("Done")
     # g.show_graph()
@@ -225,11 +243,11 @@ def connect_start_and_goal_with_graph(g,vertex_state_list,START_ROBOT_POSITION,G
     static_cuboid_list = get_static_cuboids(clientID)
     tf_bw_joint_cuboid_centroid = np.load("tf_bw_joint_cuboid_centroid.npy")
 
-    if(not check_if_state_is_collision_free(clientID,START_ROBOT_POSITION,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list)): 
+    if(not check_if_state_is_collision_free(clientID,START_ROBOT_POSITION,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list,tf_bw_joint_and_next_joint)): 
         print("Start position in collision")
         return g,vertex_state_list,-1
 
-    if(not check_if_state_is_collision_free(clientID,GOAL_ROBOT_POSITION,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list)): 
+    if(not check_if_state_is_collision_free(clientID,GOAL_ROBOT_POSITION,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list,tf_bw_joint_and_next_joint)): 
         print("Goal position in collision")
         return  g,vertex_state_list,-1
 
@@ -313,6 +331,7 @@ def initialize_model(initial_state_file1,initial_state_file2,robot_model):
     initial_joint_pos = np.load(initial_state_file1)
     initial_joint_orientation = np.load(initial_state_file2)
     joint_axis = np.array([[0,0,1],[0,1,0],[0,1,0],[0,1,0],[-1,0,0],[0,1,0],[0,1,0]])
+    #joint_axis = np.array([[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1]])
     robot_model.initialize_model_using_np(initial_joint_pos,initial_joint_orientation,joint_axis)
 
 def control_locobot(joint_targets,clientID):
@@ -370,6 +389,8 @@ def control_locobot(joint_targets,clientID):
             count+=1
 
     print("Exiting controller")
+    get_tf_bw_joint_and_bb(clientID)
+    print("tf captured")
     # initial_joint_pos,initial_joint_orientation = np.asarray(loc_bb.arm_configurations(clientID))
     # print(initial_joint_pos.shape)
     # print(initial_joint_pos)
@@ -377,25 +398,55 @@ def control_locobot(joint_targets,clientID):
     # print(initial_joint_orientation)
     # np.save("initial_joint_pos",initial_joint_pos)
     # np.save("initial_joint_orientation",initial_joint_orientation)
-    # get_tf_bw_joint_and_bb(clientID)
     vu.stop_sim(clientID)
 
 def get_tf_bw_joint_and_bb(clientID):       
     '''
-    OUTPUT: Outputs the transform between the various joints and their corresponding collision cuboid. Returns a 4X4X7 np matrix
+    OUTPUT: Outputs the transform between the various joints and their corresponding collision cuboid. 
+    The function saves two 4X4X7 np matrix. One stores the tf b/w joint and collision cuboid centroid. The other stores tf b/w joint and joint+1
     '''
-    all_collision_cuboid_positions,all_collision_cuboid_orientations = np.asarray(loc_bb.collision_cuboid_configurations(clientID))
-    all_joint_pos,all_joint_orientation = np.asarray(loc_bb.arm_configurations(clientID))
+
+    #all_collision_cuboid_positions,all_collision_cuboid_orientations = np.asarray(loc_bb.collision_cuboid_configurations(clientID))
+    #all_joint_pos,all_joint_orientation = np.asarray(loc_bb.arm_configurations(clientID))
+    all_joint_pos = np.array([[-0.0896, 0.0003875, 0.159], [0,0,0.04125], [0.05, 0, 0.2413], [0.2492, 0,0.2413], [0.063, 0.0001, 0.2413], [0.386, -0.02399, 0.2463], [0.386, 0.02601, 0.2463]])
+
+    #np.load("/Users/harsh/Desktop/CMU_Sem_2/Robot_Autonomy/Assignments/hw2_release/code/utilities/cuboid_initial_cuboid_dim.npy")
+    all_collision_cuboid_positions = np.load("/Users/harsh/Desktop/CMU_Sem_2/Robot_Autonomy/Assignments/hw2_release/code/utilities/cuboid_initial_cuboid_origin.npy")
+    all_collision_cuboid_orientations = np.load("/Users/harsh/Desktop/CMU_Sem_2/Robot_Autonomy/Assignments/hw2_release/code/utilities/cuboid_initial_cuboid_rpy.npy")
+
     tf_bw_joint_and_bb_list = np.zeros((4,4,all_joint_pos.shape[0]))
+    tf_bw_joint_and_next_joint = np.zeros((4,4,all_joint_pos.shape[0]))
+    running_homo = np.identity(4)
+
     for i in range(all_joint_pos.shape[0]):
-        R = transforms3d.euler.euler2mat(all_joint_orientation[i,0], all_joint_orientation[i,1], all_joint_orientation[i,2], 'sxyz') #SOURCE OF ERROR- see xyz correct or not
-        p = np.reshape(all_joint_pos[i,:],(3,1))
-        H_JtoO = np.vstack((np.hstack((R,p)),np.array([0,0,0,1])))
+        R = transforms3d.euler.euler2mat(0,0,0, 'sxyz') #SOURCE OF ERROR- see xyz correct or not
+        if(not i==0):
+            p = np.reshape(all_joint_pos[i,:],(3,1)) + np.reshape(all_joint_pos[0,:],(3,1))
+            print(p)
+        else:
+            p = np.reshape(all_joint_pos[i,:],(3,1))
+        H_OtoJ = np.vstack((np.hstack((R,p)),np.array([0,0,0,1])))
+        # pdb.set_trace()
+
         R2 = transforms3d.euler.euler2mat(all_collision_cuboid_orientations[i,0], all_collision_cuboid_orientations[i,1], all_collision_cuboid_orientations[i,2], 'sxyz') #SOURCE OF ERROR- see xyz correct or not
         p2 = np.reshape(all_collision_cuboid_positions[i,:],(3,1))
-        H_JtoC = np.vstack((np.hstack((R2,p2)),np.array([0,0,0,1])))
-        tf_bw_joint_and_bb_list[:,:,i] = np.dot(H_JtoO,np.linalg.inv(H_JtoC))
-    # np.save("tf_bw_joint_cuboid_centroid.npy",tf_bw_joint_and_bb_list)
+        H_OtoC = np.vstack((np.hstack((R2,p2)),np.array([0,0,0,1])))
+        # H_JtoC = np.vstack((np.hstack((R2,p2)),np.array([0,0,0,1])))
+        # tf_bw_joint_and_bb_list[:,:,i] = np.dot(H_JtoO,np.linalg.inv(H_CtoO))
+        tf_bw_joint_and_bb_list[:,:,i] = np.dot(np.linalg.inv(H_OtoJ),H_OtoC)
+
+        if(i==0):
+            tf_bw_joint_and_next_joint[:,:,i] = H_OtoJ
+        else:
+            tf_bw_joint_and_next_joint[:,:,i] = np.dot(np.linalg.inv(running_homo),H_OtoJ)
+            # tf_bw_joint_and_next_joint[:,:,i] = np.dot(np.linalg.inv(tf_bw_joint_and_next_joint[:,:,i-1]),H_OtoJ)
+
+        running_homo = np.dot(running_homo,tf_bw_joint_and_next_joint[:,:,i])
+
+    np.save("tf_bw_joint_cuboid_centroid.npy",tf_bw_joint_and_bb_list)
+    np.save("tf_bw_joint_and_next_joint.npy",tf_bw_joint_and_next_joint)
+
+#H0toJ
 
 def get_target_positions(path,vertex_state_list):
     target_positions = []
@@ -423,41 +474,43 @@ if __name__ == "__main__":
     initial_state_file2 = "/Users/harsh/Desktop/CMU_Sem_2/Robot_Autonomy/Assignments/hw2_release/code/utilities/initial_joint_orientation.npy"
 
     #Initializations
-    g = Graph() 
-    number_of_points_to_sample = 10
-    robot_model = Model()
-    initialize_model(initial_state_file1,initial_state_file2,robot_model)
+    # g = Graph() 
+    # number_of_points_to_sample = 15
+    # robot_model = Model()
+    # initialize_model(initial_state_file1,initial_state_file2,robot_model)
 
-    #Preprocessing Phase: Make the PRM graph
-    g,vertex_state_list = make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample)
+    # np.load("/Users/harsh/Desktop/CMU_Sem_2/Robot_Autonomy/Assignments/hw2_release/code/utilities/cuboid_initial_cuboid_dim.npy")
+    # np.load("/Users/harsh/Desktop/CMU_Sem_2/Robot_Autonomy/Assignments/hw2_release/code/utilities/cuboid_initial_cuboid_origin.npy")
+    # np.load("/Users/harsh/Desktop/CMU_Sem_2/Robot_Autonomy/Assignments/hw2_release/code/utilities/cuboid_initial_cuboid_rpy.npy")
 
-    #Enter start and end position of the robot in degrees for revolute joints and in meters for prismatic joints
-    START_ROBOT_POSITION = np.array([-80,0,0,0,0,-0.03,0.03])   #Note: The last two joints are prismatic
-    # START_ROBOT_POSITION = np.array([0,55,-75,-75,0,-0.03,0.03])  #Note: The last two joints are prismatic
-    GOAL_ROBOT_POSITION = np.array([0,60,-75,-75,0,-0.03,0.03]) #Note: The last two joints are prismatic
+    # #Preprocessing Phase: Make the PRM graph
+    # g,vertex_state_list = make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample)
 
-    #degree to radians conversions for angles
-    START_ROBOT_POSITION[0:5] = np.radians(START_ROBOT_POSITION[0:5])
-    GOAL_ROBOT_POSITION[0:5] = np.radians(GOAL_ROBOT_POSITION[0:5])
+    # #Enter start and end position of the robot in degrees for revolute joints and in meters for prismatic joints
+    # START_ROBOT_POSITION = np.array([-80,0,0,0,0,-0.03,0.03])   #Note: The last two joints are prismatic
+    # # START_ROBOT_POSITION = np.array([0,55,-75,-75,0,-0.03,0.03])  #Note: The last two joints are prismatic
+    # GOAL_ROBOT_POSITION = np.array([0,60,-75,-75,0,-0.03,0.03]) #Note: The last two joints are prismatic
 
-    #Query Phase: Connect start and goal positions to the graph
-    g,vertex_state_list,flag = connect_start_and_goal_with_graph(g,vertex_state_list,START_ROBOT_POSITION,GOAL_ROBOT_POSITION,clientID,robot_model)
-    if(flag==1):
-        source = len(vertex_state_list)-2
-        goal = len(vertex_state_list)-1
-        path = dijkastra.dijkstra(g,source, goal)
-        print(path)
+    # #degree to radians conversions for angles
+    # START_ROBOT_POSITION[0:5] = np.radians(START_ROBOT_POSITION[0:5])
+    # GOAL_ROBOT_POSITION[0:5] = np.radians(GOAL_ROBOT_POSITION[0:5])
 
-        target_positions = get_target_positions(path,vertex_state_list)
-    else:
-        print("Incorrect Query given")
+    # #Query Phase: Connect start and goal positions to the graph
+    # g,vertex_state_list,flag = connect_start_and_goal_with_graph(g,vertex_state_list,START_ROBOT_POSITION,GOAL_ROBOT_POSITION,clientID,robot_model)
+    # if(flag==1):
+    #     source = len(vertex_state_list)-2
+    #     goal = len(vertex_state_list)-1
+    #     path = dijkastra.dijkstra(g,source, goal)
+    #     print(path)
 
+    #     target_positions = get_target_positions(path,vertex_state_list)
+    # else:
+    #     print("Incorrect Query given")
 
     #Controls Phase
-    # target_positions = [[0,0,0,0,0,0,0]]
-    target_positions = [[-80,0,0,0,0,-0.03,0.03]]
+    target_positions = [[0,0,0,0,0,-0.03,0.03]]
+    # target_positions = [[-80,0,0,0,0,-0.03,0.03]]
     control_locobot(target_positions,clientID)
-        # get_static_cuboids(clientID)
 
 
 
