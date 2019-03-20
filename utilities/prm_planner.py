@@ -15,6 +15,8 @@ import locobot_joint_ctrl as ctrl
 import pdb
 import pickle
 import dijkastra
+import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 
 class Graph: 
     #NOTE: Reference stated in the documentation of the program
@@ -37,16 +39,17 @@ class Graph:
     def edit_graph_for_not_connected_vertices(self,vertex_state_list):
         new_graph = defaultdict(list) 
         new_state_list = []
-        # vertices_removed = []
+        vertices_removed = []
         count = 0
         for key,value in self.graph.items():
             if(not len(value)==0):
                 new_graph[count] = value
                 new_state_list.append(vertex_state_list[key])
                 count+=1
-            # else:
-            #     vertices_removed.append(key)
-        # print(vertices_removed)
+            else:
+                vertices_removed.append(key)
+        print("Removed vertices are: \n")
+        print(vertices_removed)
         self.graph = new_graph
         return new_state_list
 
@@ -77,7 +80,7 @@ def get_forward_kinematics(joint_angles,robot_model,tf_bw_joint_and_next_joint):
             net_rotation = joint_angles[i]*robot_model.axis[i,:]
         else:
             net_rotation = np.array([0,0,0])
-        R = transforms3d.euler.euler2mat(net_rotation[0], net_rotation[1], net_rotation[2], 'sxyz') #SOURCE OF ERROR- see xyz correct or not
+        R = transforms3d.euler.euler2mat(net_rotation[0], net_rotation[1], net_rotation[2], 'szyx') #SOURCE OF ERROR- see xyz correct or not
         #p = np.reshape(robot_model.position[i,:],(3,1)) 
         p = np.array([[0],[0],[0]])
         # pdb.set_trace()
@@ -137,7 +140,7 @@ def check_if_state_is_collision_free(clientID,random_joint_angles,robot_model,ro
         dim = robot_cuboid_dimensions[i,:].tolist()
         cuboid_temp = collision_checker.cuboid(pos,[al,be,ga],dim)
         joint_cuboid_list.append(cuboid_temp)
-    pdb.set_trace()
+    # pdb.set_trace()
     for i,elt in enumerate(joint_cuboid_list):
         for j,elo in enumerate(static_cuboid_list):
             # print(i,j)
@@ -173,6 +176,7 @@ def make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample = 100):
     static_cuboid_list = get_static_cuboids(clientID)
     tf_bw_joint_cuboid_centroid = np.load("tf_bw_joint_cuboid_centroid.npy")
     tf_bw_joint_and_next_joint = np.load("tf_bw_joint_and_next_joint.npy")
+    # pdb.set_trace()
 
     #initialize_graph(clientID,g,vertex_state_list) #Remove this line
 
@@ -181,7 +185,7 @@ def make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample = 100):
         finger_pos = np.array([-0.03,0.03])                              #Initial angle for fingers. MUST CHANGE as required!
         random_joint_angles = np.hstack((random_joint_angles,finger_pos))
         # random_joint_angles = np.array([0,1.0472,-1.309,-1.309,0,-0.03,0.03])
-        random_joint_angles = np.array([-1.396,0,0,0,0,-0.03,0.03])
+        # random_joint_angles = np.array([-1.3955,0,0,0,0,-0.03,0.03])
         # joint_positions =vu.get_arm_joint_positions(clientID)
         #previous_joint_positions = joint_positions
         # print("Vertex sampled is ",random_joint_angles,"\n")
@@ -196,7 +200,7 @@ def make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample = 100):
             # print("Vertex added to graph")
 
             for neighbor in nearest_neighbours:
-                if(connect(neighbor,vertex_state_list,clientID,random_joint_angles,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list)):
+                if(connect(neighbor,vertex_state_list,clientID,random_joint_angles,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list,tf_bw_joint_and_next_joint)):
                     cost = np.linalg.norm(vertex_state_list[neighbor] - random_joint_angles)
                     g.addEdge(neighbor,[len(vertex_state_list)-1,cost])
                     g.addEdge(len(vertex_state_list)-1,[neighbor,cost])
@@ -207,14 +211,14 @@ def make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample = 100):
     # g.show_graph()
     # print("\n")
     # print(vertex_state_list)
-    vertex_state_list = g.edit_graph_for_not_connected_vertices(vertex_state_list)
-    # g.show_graph()
+    #vertex_state_list = g.edit_graph_for_not_connected_vertices(vertex_state_list)
+    g.show_graph()
     # print("\n")
     # print(vertex_state_list)
     # pdb.set_trace()
     return g,vertex_state_list
 
-def connect(neighbor,vertex_state_list,clientID,random_joint_angles,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list):
+def connect(neighbor,vertex_state_list,clientID,random_joint_angles,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list,tf_bw_joint_and_next_joint):
     '''
     INPUT: int neighbor (Index of the neighbour in vertex_state_list) 
            vertex_state_list (The entire list of states)
@@ -223,11 +227,11 @@ def connect(neighbor,vertex_state_list,clientID,random_joint_angles,robot_model,
     You have two positions in the Cfree space, we take the difference of these and discretize the path in between these two positions in discretization_steps
     number of steps and check for collision of each.
     '''
-    discretization_steps = 10
+    discretization_steps = 20
     step_size_for_each_joint = (vertex_state_list[neighbor] - vertex_state_list[-1])/discretization_steps
     for i in range(discretization_steps):
         new_position = vertex_state_list[-1] + (i+1)*step_size_for_each_joint 
-        if(not (check_if_state_is_collision_free(clientID,new_position,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list))):
+        if(not (check_if_state_is_collision_free(clientID,new_position,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list,tf_bw_joint_and_next_joint))):
             # print("Connect test failed for ",i+1, " iteration ","\n")
             return False
     print("Vertex ",neighbor," and ",len(vertex_state_list)-1," connected \n")
@@ -242,6 +246,7 @@ def connect_start_and_goal_with_graph(g,vertex_state_list,START_ROBOT_POSITION,G
     robot_cuboid_dimensions = get_robot_cuboid_dimensions(clientID)
     static_cuboid_list = get_static_cuboids(clientID)
     tf_bw_joint_cuboid_centroid = np.load("tf_bw_joint_cuboid_centroid.npy")
+    tf_bw_joint_and_next_joint = np.load("tf_bw_joint_and_next_joint.npy")
 
     if(not check_if_state_is_collision_free(clientID,START_ROBOT_POSITION,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list,tf_bw_joint_and_next_joint)): 
         print("Start position in collision")
@@ -259,7 +264,7 @@ def connect_start_and_goal_with_graph(g,vertex_state_list,START_ROBOT_POSITION,G
         nearest_neighbours = get_nearest_neighbours(vertex_state_list,START_ROBOT_POSITION,nearest_neighbours_to_take)
 
         for neighbor in nearest_neighbours:
-            if(connect(neighbor,vertex_state_list,clientID,START_ROBOT_POSITION,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list)):
+            if(connect(neighbor,vertex_state_list,clientID,START_ROBOT_POSITION,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list,tf_bw_joint_and_next_joint)):
                 cost = np.linalg.norm(vertex_state_list[neighbor] - START_ROBOT_POSITION)
                 g.addEdge(neighbor,[len(vertex_state_list)-1,cost])
                 g.addEdge(len(vertex_state_list)-1,[neighbor,cost])
@@ -271,12 +276,13 @@ def connect_start_and_goal_with_graph(g,vertex_state_list,START_ROBOT_POSITION,G
     nearest_neighbours = get_nearest_neighbours(vertex_state_list,GOAL_ROBOT_POSITION,nearest_neighbours_to_take)
 
     for neighbor in nearest_neighbours:
-        if(connect(neighbor,vertex_state_list,clientID,GOAL_ROBOT_POSITION,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list)):
+        if(connect(neighbor,vertex_state_list,clientID,GOAL_ROBOT_POSITION,robot_model,robot_cuboid_dimensions,tf_bw_joint_cuboid_centroid,static_cuboid_list,tf_bw_joint_and_next_joint)):
             cost = np.linalg.norm(vertex_state_list[neighbor] - GOAL_ROBOT_POSITION)
             g.addEdge(neighbor,[len(vertex_state_list)-1,cost])
             g.addEdge(len(vertex_state_list)-1,[neighbor,cost])
             break
-    # print("\n")
+    print("Connect start and end with graph executed \n")
+    print("\n")
     g.show_graph()
     print("\n")
     # print(vertex_state_list)
@@ -285,7 +291,21 @@ def connect_start_and_goal_with_graph(g,vertex_state_list,START_ROBOT_POSITION,G
 def get_nearest_neighbours(vertex_state_list,sampled_vertex,nearest_neighbours_to_take = 5):
     '''
     Input: The list of all the vertices and the newly sampled vertex
-    Output: The indexes of the 3 closest vertices in the form of a numpy array
+    Output: The indexes of the 5 closest vertices in the form of a numpy array
+    '''
+
+    vertex_state_list = np.asarray(vertex_state_list[:-1])
+    dist = np.linalg.norm(vertex_state_list-sampled_vertex,axis=1) #dist is expected to be a column numpy array
+    vertex_list_by_distance = np.argsort(dist)
+    if(vertex_list_by_distance.shape[0]>nearest_neighbours_to_take-1):     
+        return vertex_list_by_distance[0:nearest_neighbours_to_take]
+    else:
+        return vertex_list_by_distance
+
+def get_nearest_neighbours_for_start_and_goal(vertex_state_list,sampled_vertex,nearest_neighbours_to_take = 5):
+    '''
+    Input: The list of all the vertices and the newly sampled vertex
+    Output: The indexes of the 5 closest vertices in the form of a numpy array
     '''
 
     vertex_state_list = np.asarray(vertex_state_list[:-1])
@@ -388,9 +408,9 @@ def control_locobot(joint_targets,clientID):
             # print("\n", "Target number is ",target_number+1,"\n"," Iteration number is ",count,"\n")
             count+=1
 
+    controller.plot_joints()
     print("Exiting controller")
-    get_tf_bw_joint_and_bb(clientID)
-    print("tf captured")
+    # get_tf_bw_joint_and_bb(clientID)
     # initial_joint_pos,initial_joint_orientation = np.asarray(loc_bb.arm_configurations(clientID))
     # print(initial_joint_pos.shape)
     # print(initial_joint_pos)
@@ -422,7 +442,7 @@ def get_tf_bw_joint_and_bb(clientID):
         R = transforms3d.euler.euler2mat(0,0,0, 'sxyz') #SOURCE OF ERROR- see xyz correct or not
         if(not i==0):
             p = np.reshape(all_joint_pos[i,:],(3,1)) + np.reshape(all_joint_pos[0,:],(3,1))
-            print(p)
+            # print(p)
         else:
             p = np.reshape(all_joint_pos[i,:],(3,1))
         H_OtoJ = np.vstack((np.hstack((R,p)),np.array([0,0,0,1])))
@@ -441,10 +461,13 @@ def get_tf_bw_joint_and_bb(clientID):
             tf_bw_joint_and_next_joint[:,:,i] = np.dot(np.linalg.inv(running_homo),H_OtoJ)
             # tf_bw_joint_and_next_joint[:,:,i] = np.dot(np.linalg.inv(tf_bw_joint_and_next_joint[:,:,i-1]),H_OtoJ)
 
+        # pdb.set_trace()
         running_homo = np.dot(running_homo,tf_bw_joint_and_next_joint[:,:,i])
+        # pdb.set_trace()
 
     np.save("tf_bw_joint_cuboid_centroid.npy",tf_bw_joint_and_bb_list)
     np.save("tf_bw_joint_and_next_joint.npy",tf_bw_joint_and_next_joint)
+    print("tf captured and saved")
 
 #H0toJ
 
@@ -470,46 +493,52 @@ if __name__ == "__main__":
     # robot_model = get_model_from_URDF(urdf_xml)
 
     #CHANGE THIS PATH TO ABSOLUTE!
-    initial_state_file1 = "/Users/harsh/Desktop/CMU_Sem_2/Robot_Autonomy/Assignments/hw2_release/code/utilities/initial_joint_pos.npy"
-    initial_state_file2 = "/Users/harsh/Desktop/CMU_Sem_2/Robot_Autonomy/Assignments/hw2_release/code/utilities/initial_joint_orientation.npy"
+    initial_state_file1 = "initial_joint_pos.npy"
+    initial_state_file2 = "initial_joint_orientation.npy"
+    deg_to_rad = np.pi/180
 
     #Initializations
-    # g = Graph() 
-    # number_of_points_to_sample = 15
-    # robot_model = Model()
-    # initialize_model(initial_state_file1,initial_state_file2,robot_model)
+    g = Graph() 
+    number_of_points_to_sample = 30
+    robot_model = Model()
+    initialize_model(initial_state_file1,initial_state_file2,robot_model)
 
-    # np.load("/Users/harsh/Desktop/CMU_Sem_2/Robot_Autonomy/Assignments/hw2_release/code/utilities/cuboid_initial_cuboid_dim.npy")
-    # np.load("/Users/harsh/Desktop/CMU_Sem_2/Robot_Autonomy/Assignments/hw2_release/code/utilities/cuboid_initial_cuboid_origin.npy")
-    # np.load("/Users/harsh/Desktop/CMU_Sem_2/Robot_Autonomy/Assignments/hw2_release/code/utilities/cuboid_initial_cuboid_rpy.npy")
+    #gazzab = np.load("/Users/harsh/Desktop/CMU_Sem_2/Robot_Autonomy/Assignments/hw2_release/code/utilities/cuboid_initial_cuboid_dim.npy")
+    ## np.load("/Users/harsh/Desktop/CMU_Sem_2/Robot_Autonomy/Assignments/hw2_release/code/utilities/cuboid_initial_cuboid_origin.npy")
+    ## np.load("/Users/harsh/Desktop/CMU_Sem_2/Robot_Autonomy/Assignments/hw2_release/code/utilities/cuboid_initial_cuboid_rpy.npy")
 
-    # #Preprocessing Phase: Make the PRM graph
-    # g,vertex_state_list = make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample)
+    #Preprocessing Phase: Make the PRM graph
+    g,vertex_state_list = make_graph_PRM(clientID,g,robot_model,number_of_points_to_sample)
 
-    # #Enter start and end position of the robot in degrees for revolute joints and in meters for prismatic joints
-    # START_ROBOT_POSITION = np.array([-80,0,0,0,0,-0.03,0.03])   #Note: The last two joints are prismatic
-    # # START_ROBOT_POSITION = np.array([0,55,-75,-75,0,-0.03,0.03])  #Note: The last two joints are prismatic
-    # GOAL_ROBOT_POSITION = np.array([0,60,-75,-75,0,-0.03,0.03]) #Note: The last two joints are prismatic
+    #Enter start and end position of the robot in degrees for revolute joints and in meters for prismatic joints
+    START_ROBOT_POSITION = np.array([-80,0,0,0,0,-0.03,0.03])   #Note: The last two joints are prismatic
+    # START_ROBOT_POSITION = np.array([0,55,-75,-75,0,-0.03,0.03])  #Note: The last two joints are prismatic
+    GOAL_ROBOT_POSITION = np.array([0,60,-75,-75,0,-0.03,0.03]) #Note: The last two joints are prismatic
 
-    # #degree to radians conversions for angles
-    # START_ROBOT_POSITION[0:5] = np.radians(START_ROBOT_POSITION[0:5])
-    # GOAL_ROBOT_POSITION[0:5] = np.radians(GOAL_ROBOT_POSITION[0:5])
+    #degree to radians conversions for angles
+    START_ROBOT_POSITION[0:5] = np.radians(START_ROBOT_POSITION[0:5])
+    GOAL_ROBOT_POSITION[0:5] = np.radians(GOAL_ROBOT_POSITION[0:5])
 
-    # #Query Phase: Connect start and goal positions to the graph
-    # g,vertex_state_list,flag = connect_start_and_goal_with_graph(g,vertex_state_list,START_ROBOT_POSITION,GOAL_ROBOT_POSITION,clientID,robot_model)
-    # if(flag==1):
-    #     source = len(vertex_state_list)-2
-    #     goal = len(vertex_state_list)-1
-    #     path = dijkastra.dijkstra(g,source, goal)
-    #     print(path)
+    print("length of vertex state list is \n",len(vertex_state_list))
 
-    #     target_positions = get_target_positions(path,vertex_state_list)
-    # else:
-    #     print("Incorrect Query given")
+    #Query Phase: Connect start and goal positions to the graph
+    g,vertex_state_list,flag = connect_start_and_goal_with_graph(g,vertex_state_list,START_ROBOT_POSITION,GOAL_ROBOT_POSITION,clientID,robot_model)
+    print("length of vertex state list is \n",len(vertex_state_list))
+    if(flag==1):
+        source = len(vertex_state_list)-2
+        goal = len(vertex_state_list)-1
+        path = dijkastra.dijkstra(g,source, goal)
+        print(path)
 
-    #Controls Phase
-    target_positions = [[0,0,0,0,0,-0.03,0.03]]
-    # target_positions = [[-80,0,0,0,0,-0.03,0.03]]
+        target_positions = get_target_positions(path,vertex_state_list)
+    else:
+        print("Incorrect Query given")
+
+    #Controls Phase (Provide angles in radians)
+    # target_positions = [[0,0,0,0,0,-0.03,0.03]]
+    # target_positions = [[-90*deg_to_rad,0,0,0,0,-0.03,0.03]]
+    print("Path found ")
+    pdb.set_trace()
     control_locobot(target_positions,clientID)
 
 

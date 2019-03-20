@@ -32,10 +32,11 @@ ARM_JOINT_NAMES = [
 N_ARM_JOINTS = len(ARM_JOINT_NAMES)
 ARM_JOINT_HANDLES = None
 
-COLLISION_CUBOID_NAMES = ['arm_base_link_joint_collision_cuboid', # revolute / arm_base_link <- shoulder_link
+COLLISION_CUBOID_NAMES = [#'arm_base_link_joint_collision_cuboid', # revolute / arm_base_link <- shoulder_link
                           'shoulder_link_collision_cuboid', # revolute / shoulder_link <- elbow_link
                           'elbow_link_collision_cuboid', # revolute / elbow_link <- forearm_link
                           'forearm_link_collision_cuboid', # revolute / forearm_link <- wrist_link
+                          'wrist_link_collision_cuboid',
                           'gripper_link_collision_cuboid', # revolute / wrist_link <- gripper_link
                           'finger_r_collision_cuboid', # prismatic / gripper_link <- finger_r
                           'finger_l_collision_cuboid'] # prismatic / gripper_link <- finger_l

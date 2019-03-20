@@ -36,7 +36,7 @@ def dijkstra(g,source, dest):
     while unvisited_vertices:
 
         current_vertex = min(unvisited_vertices, key=lambda vertex: distance[vertex])
-        print(current_vertex,"\n")
+        # print(current_vertex,"\n")
 
         if distance[current_vertex] == inf:
             print("Process done..")
@@ -77,4 +77,9 @@ if __name__ == "__main__":
     g.addEdge("d",["e",6])
     g.addEdge("e",["f",9])
     path = dijkstra(g,"a","e")
+
+    print("The user created graph is \n")
+    g.show_graph()
+    print("\n Querying path between a and e \n")
     print(path)
+    # ipdb.set_trace()
